@@ -22,9 +22,9 @@ use std::{cell::RefCell, collections::HashMap, fmt::Debug};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(bound = "C::Scalar: DeserializeOwned")]
-struct DKGInfo<C: Curve> {
+pub struct DKGInfo<C: Curve> {
     private_key: C::Scalar,
-    public_key: C::Point,
+    pub public_key: C::Point,
     index: Idx,
     group: Group<C>,
     secret: Poly<C::Scalar>,
@@ -55,7 +55,7 @@ impl<C: Curve> DKGInfo<C> {
 #[serde(bound = "C::Scalar: DeserializeOwned")]
 pub struct DKG<C: Curve> {
     /// Metadata about the DKG
-    info: DKGInfo<C>,
+    pub info: DKGInfo<C>,
 }
 
 impl<C: Curve> DKG<C> {

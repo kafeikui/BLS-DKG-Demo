@@ -1971,6 +1971,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "randcast-mock-demo"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "bincode",
+ "clt",
+ "dkg-core",
+ "futures",
+ "glob",
+ "gumdrop",
+ "hex 0.4.2",
+ "paired",
+ "rand 0.7.3",
+ "rustc-hex",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "threshold-bls",
+ "tokio",
+]
+
+[[package]]
 name = "raw-cpuid"
 version = "7.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2482,20 +2505,6 @@ dependencies = [
  "sha2",
  "static_assertions",
  "thiserror",
-]
-
-[[package]]
-name = "threshold-bls-ffi"
-version = "0.1.0"
-dependencies = [
- "bincode",
- "bls-crypto",
- "cfg-if",
- "rand_chacha 0.2.2",
- "rand_core 0.5.1",
- "serde",
- "threshold-bls",
- "wasm-bindgen",
 ]
 
 [[package]]

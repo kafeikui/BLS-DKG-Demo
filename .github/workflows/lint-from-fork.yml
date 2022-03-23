@@ -1,0 +1,19 @@
+name: Lint On PR
+
+on:
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  run-linters:
+    name: Run linters
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
+    - name: Format
+      run: cargo fmt
+    - name: Lint
+      run: cargo clippy

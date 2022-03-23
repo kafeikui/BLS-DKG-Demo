@@ -162,7 +162,7 @@ pub trait Transactions {
         disqualified_nodes: Vec<String>,
     ) -> bool;
 
-    fn request(&mut self, message: String) -> bool;
+    fn request(&mut self, message: &str) -> bool;
 
     fn fulfill(
         &mut self,
@@ -480,7 +480,7 @@ impl Transactions for Controller {
         true
     }
 
-    fn request(&mut self, message: String) -> bool {
+    fn request(&mut self, message: &str) -> bool {
         let valid_group_indices = self.valid_group_indices();
 
         if valid_group_indices.is_empty() {
@@ -502,7 +502,7 @@ impl Transactions for Controller {
 
         let signature_task = SignatureTask {
             index: self.signature_count,
-            message,
+            message: String::from(message),
             group_index: assignment_group_index,
             assignment_block_height: self.block_height,
         };

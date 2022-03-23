@@ -38,10 +38,10 @@ async fn main() -> anyhow::Result<()> {
 
     phase0s.iter().enumerate().for_each(|(i, phase0)| {
         controller.node_register(
-            String::from("0x") + &i.to_string(),
+            format!("0x{}", i),
             bincode::serialize(&phase0.info.public_key).unwrap(),
             String::from(""),
-            String::from("0x") + &i.to_string(),
+            format!("0x{}", i),
         );
     });
 
@@ -65,7 +65,7 @@ async fn main() -> anyhow::Result<()> {
 
     (0..n).for_each(|i| {
         let res = controller.commit_dkg(
-            String::from("0x") + &i.to_string(),
+            format!("0x{}", i),
             group_index,
             group_epoch,
             bincode::serialize(&pubkey).unwrap(),
@@ -87,7 +87,7 @@ async fn main() -> anyhow::Result<()> {
 
     println!("An user is requesting a randomness... msg seed: {}", msg);
 
-    let request_res = controller.request(msg.clone());
+    let request_res = controller.request(&msg);
 
     println!("request_res: {}", request_res);
 
@@ -124,11 +124,11 @@ async fn main() -> anyhow::Result<()> {
             .iter()
             .enumerate()
             .for_each(|(i, partial_sig)| {
-                partial_signatures.insert(String::from("0x") + &i.to_string(), partial_sig.clone());
+                partial_signatures.insert(format!("0x{}", i), partial_sig.clone());
             });
 
         let res = controller.fulfill(
-            String::from("0x") + &i.to_string(),
+            format!("0x{}", i),
             signature_index,
             sig.clone(),
             partial_signatures,

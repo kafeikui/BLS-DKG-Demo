@@ -13,6 +13,13 @@ jobs:
 
     steps:
     - uses: actions/checkout@v2
+    - name: Install Dependencies
+      run: |
+          mkdir -p "$HOME/bin"
+          wget -q https://github.com/ethereum/solidity/releases/download/v0.6.6/solc-static-linux -O $HOME/bin/solc
+          chmod u+x "$HOME/bin/solc"
+          export PATH=$HOME/bin:$PATH
+          solc --version
     - name: Format
       run: cargo fmt
     - name: Lint

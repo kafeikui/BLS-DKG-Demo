@@ -1,5 +1,6 @@
-use ethers::{contract::Abigen, utils::Solc};
 use std::{fs::File, io::Write};
+
+use ethers::{prelude::Abigen, utils::Solc};
 
 const PATH: &str = "../../solidity/contracts/DKG.sol";
 // Generates the bindings under `src/`

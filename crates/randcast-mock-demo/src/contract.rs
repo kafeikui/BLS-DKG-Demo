@@ -1,9 +1,11 @@
-use dkg_core::primitives::minimum_threshold;
-use paired::bls12_381::G1;
 use std::cmp::max;
 use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
+
+use paired::bls12_381::G1;
+
+use dkg_core::primitives::minimum_threshold;
 use threshold_bls::schemes::bls12_381::G1Scheme as SigScheme;
 use threshold_bls::sig::SignatureScheme;
 
@@ -78,9 +80,9 @@ pub struct Group {
 
 #[derive(Clone)]
 pub struct Member {
-    index: usize,
-    id_address: String,
-    partial_public_key: Vec<u8>,
+    pub index: usize,
+    pub id_address: String,
+    pub partial_public_key: Vec<u8>,
 }
 
 #[derive(Clone)]
@@ -207,11 +209,11 @@ impl Internal for Controller {
 
 impl MockHelper for Controller {
     fn emit_dkg_task(&self) -> &DKGTask {
-        &self.dkg_task.as_ref().unwrap()
+        self.dkg_task.as_ref().unwrap()
     }
 
     fn emit_signature_task(&self) -> &SignatureTask {
-        &self.signature_task.as_ref().unwrap()
+        self.signature_task.as_ref().unwrap()
     }
 
     fn mine(&mut self, block_number: usize) {
@@ -286,7 +288,7 @@ impl Transactions for Controller {
             let mut members = HashMap::new();
 
             for (member_id_address, member) in group.members.iter() {
-                members.insert(member_id_address.clone(), member.index.clone());
+                members.insert(member_id_address.clone(), member.index);
             }
 
             let dkg_task = DKGTask {
@@ -549,7 +551,7 @@ impl Transactions for Controller {
 
         let group_public_key: G1 = bincode::deserialize(&group.public_key).unwrap();
 
-        match SigScheme::verify(&group_public_key, &message.as_bytes(), &signature) {
+        match SigScheme::verify(&group_public_key, message.as_bytes(), &signature) {
             Ok(()) => {}
             Err(_err) => return false,
         }
@@ -683,7 +685,6 @@ impl Views for Controller {
 
 #[cfg(test)]
 pub mod tests {
-
     #[test]
     fn test_mut() {
         let a = 5;

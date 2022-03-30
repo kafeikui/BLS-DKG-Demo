@@ -22,3 +22,4 @@ solidity/cache
 solidity/build
 
 .vscode
+.idea

@@ -1,7 +1,8 @@
-use crate::poly::{Eval, Poly};
-use crate::sig::tbls::Share;
-use crate::sig::{BlindScheme, BlindThresholdScheme, Partial, ThresholdScheme};
 use thiserror::Error;
+
+use crate::poly::{Eval, Poly};
+use crate::sig::{BlindScheme, BlindThresholdScheme, Partial, ThresholdScheme};
+use crate::sig::tbls::Share;
 
 #[derive(Debug, Error)]
 // TODO: Can we get rid of this static lifetime bound?
@@ -17,8 +18,8 @@ pub enum BlindThresholdError<E: 'static + std::error::Error> {
 }
 
 impl<T> BlindThresholdScheme for T
-where
-    T: 'static + ThresholdScheme + BlindScheme,
+    where
+        T: 'static + ThresholdScheme + BlindScheme,
 {
     type Error = BlindThresholdError<<T as BlindScheme>::Error>;
 
@@ -65,18 +66,18 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use rand::thread_rng;
+
     #[cfg(feature = "bls12_381")]
     use crate::curve::bls12381::PairingCurve as PCurve;
-    #[cfg(feature = "bls12_377")]
-    use crate::curve::zexe::PairingCurve as Zexe;
     use crate::poly::{Idx, Poly};
     use crate::sig::{
         bls::{G1Scheme, G2Scheme},
-        tbls::Share,
         SignatureScheme,
+        tbls::Share,
     };
-    use rand::thread_rng;
+
+    use super::*;
 
     fn shares<B: BlindThresholdScheme>(
         n: usize,
@@ -93,18 +94,6 @@ mod tests {
         (shares, private.commit())
     }
 
-    #[cfg(feature = "bls12_377")]
-    #[test]
-    fn tblind_g1_zexe_unblind() {
-        tblind_test::<G1Scheme<Zexe>>();
-    }
-
-    #[cfg(feature = "bls12_377")]
-    #[test]
-    fn tblind_g2_zexe_unblind() {
-        tblind_test::<G2Scheme<Zexe>>();
-    }
-
     #[cfg(feature = "bls12_381")]
     #[test]
     fn tblind_g1_bellman_unblind() {
@@ -118,8 +107,8 @@ mod tests {
     }
 
     fn tblind_test<B>()
-    where
-        B: BlindThresholdScheme + SignatureScheme + ThresholdScheme,
+        where
+            B: BlindThresholdScheme + SignatureScheme + ThresholdScheme,
     {
         let n = 5;
         let thr = 4;

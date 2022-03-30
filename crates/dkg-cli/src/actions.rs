@@ -3,7 +3,7 @@ use crate::{
     opts::*,
 };
 use rand::RngCore;
-use std::{fs::File, io::Write};
+use std::{fs::File, io::Write, sync::Arc};
 
 use dkg_core::{
     primitives::{joint_feldman::*, *},
@@ -11,7 +11,10 @@ use dkg_core::{
 };
 
 use anyhow::Result;
-use ethers::prelude::*;
+use ethers::{
+    core::rand::{CryptoRng, Rng},
+    prelude::*,
+};
 use rustc_hex::{FromHex, ToHex};
 use std::convert::TryFrom;
 
@@ -27,11 +30,11 @@ struct CeloKeypairJson {
 
 pub fn keygen<R>(opts: KeygenOpts, rng: &mut R) -> Result<()>
 where
-    R: RngCore,
+    R: Rng + CryptoRng,
 {
-    let wallet = Wallet::new(rng);
+    let wallet = LocalWallet::new(rng);
     let output = CeloKeypairJson {
-        private_key: hex::encode(bincode::serialize(wallet.private_key())?),
+        private_key: hex::encode(bincode::serialize(&wallet.signer().to_bytes()[..])?),
         address: wallet.address(),
     };
 
@@ -51,7 +54,11 @@ pub async fn deploy(opts: DeployOpts) -> Result<()> {
     let bytecode = bytecode.from_hex::<Vec<u8>>()?;
 
     let provider = Provider::<Http>::try_from(opts.node_url.as_str())?;
-    let client = opts.private_key.parse::<Wallet>()?.connect(provider);
+    let wallet = opts.private_key.parse::<LocalWallet>()?;
+    let address = wallet.address();
+    let client = SignerMiddleware::new(provider, wallet);
+    let client = NonceManagerMiddleware::new(client, address);
+    let client = Arc::new(client);
     let abi = DKG_ABI.clone();
 
     let factory = ContractFactory::new(abi, Bytes::from(bytecode), client);
@@ -66,36 +73,42 @@ pub async fn deploy(opts: DeployOpts) -> Result<()> {
 
 pub async fn allow(opts: AllowlistOpts) -> Result<()> {
     let provider = Provider::<Http>::try_from(opts.node_url.as_str())?;
-    let client = opts.private_key.parse::<Wallet>()?.connect(provider);
-
+    let wallet = opts.private_key.parse::<LocalWallet>()?;
+    let address = wallet.address();
+    let client = SignerMiddleware::new(provider, wallet);
+    let client = NonceManagerMiddleware::new(client, address);
+    let client = Arc::new(client);
     let contract = DKGContract::new(opts.contract_address, client);
 
-    let mut tx_futs = Vec::new();
+    // let mut tx_futs = Vec::new();
     for addr in opts.address {
-        let tx = contract
-            .allowlist(addr)
-            .block(BlockNumber::Pending)
-            .send()
-            .await?;
+        let tx = contract.allowlist(addr).block(BlockNumber::Pending);
+        let tx2 = tx.send();
+        let tx_hash = tx2.await?;
         println!("Sent `allow` tx for {:?} (hash: {:?})", addr, tx);
-        tx_futs.push(contract.client().pending_transaction(tx));
+        // tx_futs.push(tx_hash.confirmations(6));
+        tx_hash.confirmations(6).await?;
     }
 
-    // Await them all
-    futures::future::join_all(tx_futs).await;
+    // TODO: How to await them all?
+    // futures::future::join_all(tx_futs).await;
 
     Ok(())
 }
 
 pub async fn start(opts: StartOpts) -> Result<()> {
     let provider = Provider::<Http>::try_from(opts.node_url.as_str())?;
-    let client = opts.private_key.parse::<Wallet>()?.connect(provider);
-
+    let wallet = opts.private_key.parse::<LocalWallet>()?;
+    let address = wallet.address();
+    let client = SignerMiddleware::new(provider, wallet);
+    let client = NonceManagerMiddleware::new(client, address);
+    let client = Arc::new(client);
     let contract = DKGContract::new(opts.contract_address, client);
 
     // Submit the tx and wait for the confirmation
-    let tx_hash = contract.start().send().await?;
-    let _tx_receipt = contract.client().pending_transaction(tx_hash).await?;
+    let tx = contract.start();
+    let tx_hash = tx.send().await?;
+    let _tx_receipt = tx_hash.confirmations(6).await?;
 
     Ok(())
 }
@@ -108,7 +121,11 @@ where
     R: RngCore,
 {
     let provider = Provider::<Http>::try_from(opts.node_url.as_str())?;
-    let client = opts.private_key.parse::<Wallet>()?.connect(provider);
+    let wallet = opts.private_key.parse::<LocalWallet>()?;
+    let address = wallet.address();
+    let client = SignerMiddleware::new(provider, wallet);
+    let client = NonceManagerMiddleware::new(client, address);
+    let client = Arc::new(client);
     let mut dkg = DKGContract::new(opts.contract_address, client);
 
     // 1. Generate the keys
@@ -117,8 +134,9 @@ where
     // 2. Register
     println!("Registering...");
     let public_key_serialized = bincode::serialize(&public_key)?;
-    let pending_tx = dkg.register(public_key_serialized).send().await?;
-    let _tx_receipt = dkg.pending_transaction(pending_tx).await?;
+    let tx = dkg.register(public_key_serialized);
+    let pending_tx = tx.send().await?;
+    let _tx_receipt = pending_tx.confirmations(6).await?;
 
     // Wait for Phase 1
     wait_for_phase(&dkg, 1).await?;
@@ -226,10 +244,10 @@ struct OutputJson {
     share: String,
 }
 
-async fn wait_for_phase<P: JsonRpcClient, S: Signer>(
-    dkg: &DKGContract<P, S>,
+async fn wait_for_phase<M: ethers::providers::Middleware>(
+    dkg: &DKGContract<M>,
     num: u64,
-) -> Result<(), ContractError> {
+) -> Result<(), ContractError<M>> {
     println!("Waiting for Phase {} to start", num);
 
     loop {
@@ -251,7 +269,7 @@ fn parse_bundle<D: serde::de::DeserializeOwned>(bundle: &[Vec<u8>]) -> Result<Ve
     bundle
         .iter()
         .filter(|item| !item.is_empty()) // filter out empty items
-        .map(|item| Ok(bincode::deserialize::<D>(&item)?))
+        .map(|item| Ok(bincode::deserialize::<D>(item)?))
         .collect()
 }
 

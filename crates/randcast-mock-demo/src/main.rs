@@ -100,19 +100,19 @@ async fn main() -> anyhow::Result<()> {
     // generates a partial sig with each share from the dkg
     let partial_sigs = outputs
         .iter()
-        .map(|output| G1Scheme::<BLS12_381>::partial_sign(&output.share, &msg.as_bytes()).unwrap())
+        .map(|output| G1Scheme::<BLS12_381>::partial_sign(&output.share, msg.as_bytes()).unwrap())
         .collect::<Vec<_>>();
 
     // committer verify the partial threshold signatures first
     partial_sigs.iter().for_each(|partial_sig| {
-        G1Scheme::<BLS12_381>::partial_verify(&public_poly, &msg.as_bytes(), &partial_sig).unwrap();
+        G1Scheme::<BLS12_381>::partial_verify(&public_poly, msg.as_bytes(), partial_sig).unwrap();
     });
 
     // then aggregates them
     let sig = G1Scheme::<BLS12_381>::aggregate(t, &partial_sigs).unwrap();
 
     // committer verify the threshold signature first
-    G1Scheme::<BLS12_381>::verify(&pubkey, &msg.as_bytes(), &sig).unwrap();
+    G1Scheme::<BLS12_381>::verify(pubkey, msg.as_bytes(), &sig).unwrap();
 
     println!("Committers are committing result of the signature task...");
 

@@ -19,7 +19,7 @@ jobs:
           wget -q https://github.com/ethereum/solidity/releases/download/v0.6.6/solc-static-linux -O $HOME/bin/solc
           chmod u+x "$HOME/bin/solc"
           echo "$HOME/bin" >> $GITHUB_PATH
-          solc --version
+      - run: solc --version
       - name: Format
         run: cargo fmt
       - name: Lint

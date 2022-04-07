@@ -2318,7 +2318,6 @@ dependencies = [
  "glob",
  "gumdrop",
  "hex",
- "paired",
  "prost",
  "rand 0.7.3",
  "rustc-hex",

@@ -4,10 +4,18 @@ version = "0.0.1"
 authors = ["wrs"]
 edition = "2018"
 
+[[bin]]
+name = "helloworld-server"
+path = "src/server.rs"
+
+[[bin]]
+name = "helloworld-client"
+path = "src/client.rs"
+
 [dependencies]
 dkg-core = { path = "../dkg-core" }
 threshold-bls = { path = "../threshold-bls", default-features = false, features = ["bls12_381"] }
-paired = { version = "0.18.0", features = ["serde"]}
+
 
 gumdrop = "0.7.0"
 rand = "0.7.3"
@@ -21,6 +29,12 @@ anyhow = "1.0.31"
 
 futures = "0.3.5"
 async-trait = "0.1.35"
-tokio = { version = "0.2.21", features = ["macros"] }
+tokio = { version = "1.17.0", features = ["full"] }
 rustc-hex = "2.1.0"
 clt = "0.0.6"
+
+tonic = "0.6"
+prost = "0.9"
+
+[build-dependencies]
+tonic-build = "0.6"

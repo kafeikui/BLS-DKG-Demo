@@ -5,8 +5,7 @@ use dkg_core::primitives::{
 };
 use dkg_core::{DKGPhase, Phase2Result};
 use rand::rngs::ThreadRng;
-use randcast_mock_demo::contract::*;
-use randcast_mock_demo::test_helpers::InMemoryBoard;
+use randcast_mock_demo::{contract::controller::*, test_helpers::InMemoryBoard};
 use std::collections::HashMap;
 use threshold_bls::{
     curve::bls12381::{self, PairingCurve as BLS12_381},
@@ -37,12 +36,12 @@ async fn main() -> anyhow::Result<()> {
     println!("nodes are registering to controller...");
 
     phase0s.iter().enumerate().for_each(|(i, phase0)| {
-        controller.node_register(
-            format!("0x{}", i),
-            bincode::serialize(&phase0.info.public_key).unwrap(),
-            String::from(""),
-            format!("0x{}", i),
-        );
+        controller
+            .node_register(
+                format!("0x{}", i),
+                bincode::serialize(&phase0.info.public_key).unwrap(),
+            )
+            .unwrap();
     });
 
     println!("DKG task is emitting...");
@@ -72,7 +71,7 @@ async fn main() -> anyhow::Result<()> {
             bincode::serialize(&public_poly.eval(i as u32).value).unwrap(),
             vec![],
         );
-        println!("{}-res: {}", i, res);
+        println!("{}-res: {:?}", i, res);
     });
 
     let group = controller.get_group(1);
@@ -89,7 +88,7 @@ async fn main() -> anyhow::Result<()> {
 
     let request_res = controller.request(&msg);
 
-    println!("request_res: {}", request_res);
+    println!("request_res: {:?}", request_res);
 
     println!("A signature task is emitting...");
 
@@ -127,14 +126,17 @@ async fn main() -> anyhow::Result<()> {
                 partial_signatures.insert(format!("0x{}", i), partial_sig.clone());
             });
 
-        let res = controller.fulfill(
-            format!("0x{}", i),
-            signature_index,
-            sig.clone(),
-            partial_signatures,
-        );
-
-        println!("{}-res: {}", i, res);
+        println!(
+            "{}-res: {:?}",
+            i,
+            controller.fulfill(
+                &format!("0x{}", i),
+                1,
+                signature_index,
+                sig.clone(),
+                partial_signatures,
+            )
+        )
     });
 
     let randomness_output = controller.get_last_output();

@@ -861,18 +861,20 @@ impl Transactions for Controller {
 
         let committer_address = committer.id_address.clone();
 
+        for member_id_address in partial_signatures.keys() {
+            if !group.members.contains_key(member_id_address) {
+                return Err(ControllerError::ParticipantNotExisted.into());
+            }
+        }
+
         let committer_reward = self
             .rewards
-            .get_mut(&committer.id_address)
+            .get_mut(&committer_address)
             .ok_or(ControllerError::RewardRecordNotExisted)?;
 
         *committer_reward += COMMITTER_REWARD_PER_SIGNATURE;
 
         for member_id_address in partial_signatures.keys() {
-            if !group.members.contains_key(member_id_address) {
-                return Err(ControllerError::ParticipantNotExisted.into());
-            }
-
             let node = self
                 .nodes
                 .get(member_id_address)

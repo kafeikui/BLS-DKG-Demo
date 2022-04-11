@@ -8,15 +8,15 @@
 //! the DKG fails.
 
 /// Board trait and implementations for publishing data from each DKG phase
-mod board;
+pub mod board;
 pub use board::BoardPublisher;
 
 /// Higher level objects for running a JF-DKG
-mod node;
+pub mod node;
 pub use node::{DKGPhase, NodeError, Phase2Result};
 
 /// Low level primitives and datatypes for implementing DKGs
 pub mod primitives;
 
 #[cfg(test)]
-mod test_helpers;
+pub mod test_helpers;

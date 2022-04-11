@@ -1,16 +1,17 @@
+use rand::RngCore;
+use thiserror::Error;
+
+use async_trait::async_trait;
+use threshold_bls::group::Curve;
+
 use super::{
     board::BoardPublisher,
     primitives::{
+        DKGError,
         phases::{Phase0, Phase1, Phase2, Phase3},
         types::{BundledJustification, BundledResponses, BundledShares, DKGOutput},
-        DKGError,
     },
 };
-
-use async_trait::async_trait;
-use rand::RngCore;
-use thiserror::Error;
-use threshold_bls::group::Curve;
 
 #[derive(Debug, Error)]
 /// Error thrown while running the DKG or while publishing to the board
@@ -35,7 +36,7 @@ pub enum Phase2Result<C: Curve, P: Phase3<C>> {
 type NodeResult<T> = std::result::Result<T, NodeError>;
 
 /// A DKG Phase.
-#[async_trait(?Send)]
+#[async_trait(? Send)]
 pub trait DKGPhase<C: Curve, B: BoardPublisher<C>, T> {
     /// The next DKG Phase
     type Next;
@@ -43,24 +44,24 @@ pub trait DKGPhase<C: Curve, B: BoardPublisher<C>, T> {
     /// Executes this DKG Phase and publishes the required result to the board.
     /// The `arg` is specific to each phase.
     async fn run(self, board: &mut B, arg: T) -> NodeResult<Self::Next>
-    where
-        C: 'async_trait,
-        T: 'async_trait;
+        where
+            C: 'async_trait,
+            T: 'async_trait;
 }
 
-#[async_trait(?Send)]
+#[async_trait(? Send)]
 impl<C, B, R, P> DKGPhase<C, B, &mut R> for P
-where
-    C: Curve,
-    B: BoardPublisher<C>,
-    R: RngCore,
-    P: Phase0<C>,
+    where
+        C: Curve,
+        B: BoardPublisher<C>,
+        R: RngCore,
+        P: Phase0<C>,
 {
     type Next = P::Next;
 
     async fn run(self, board: &mut B, rng: &'async_trait mut R) -> NodeResult<Self::Next>
-    where
-        C: 'async_trait,
+        where
+            C: 'async_trait,
     {
         let (next, shares) = self.encrypt_shares(rng)?;
         if let Some(sh) = shares {
@@ -74,12 +75,12 @@ where
     }
 }
 
-#[async_trait(?Send)]
+#[async_trait(? Send)]
 impl<C, B, P> DKGPhase<C, B, &[BundledShares<C>]> for P
-where
-    C: Curve,
-    B: BoardPublisher<C>,
-    P: Phase1<C>,
+    where
+        C: Curve,
+        B: BoardPublisher<C>,
+        P: Phase1<C>,
 {
     type Next = P::Next;
 
@@ -88,8 +89,8 @@ where
         board: &mut B,
         shares: &'async_trait [BundledShares<C>],
     ) -> NodeResult<Self::Next>
-    where
-        C: 'async_trait,
+        where
+            C: 'async_trait,
     {
         let (next, bundle) = self.process_shares(shares, false)?;
 
@@ -104,12 +105,12 @@ where
     }
 }
 
-#[async_trait(?Send)]
+#[async_trait(? Send)]
 impl<C, B, P> DKGPhase<C, B, &[BundledResponses]> for P
-where
-    C: Curve,
-    B: BoardPublisher<C>,
-    P: Phase2<C>,
+    where
+        C: Curve,
+        B: BoardPublisher<C>,
+        P: Phase2<C>,
 {
     type Next = Phase2Result<C, P::Next>;
 
@@ -118,8 +119,8 @@ where
         board: &mut B,
         responses: &'async_trait [BundledResponses],
     ) -> NodeResult<Self::Next>
-    where
-        C: 'async_trait,
+        where
+            C: 'async_trait,
     {
         match self.process_responses(responses) {
             Ok(output) => Ok(Phase2Result::Output(output)),
@@ -146,12 +147,12 @@ where
     }
 }
 
-#[async_trait(?Send)]
+#[async_trait(? Send)]
 impl<C, B, P> DKGPhase<C, B, &[BundledJustification<C>]> for P
-where
-    C: Curve,
-    B: BoardPublisher<C>,
-    P: Phase3<C>,
+    where
+        C: Curve,
+        B: BoardPublisher<C>,
+        P: Phase3<C>,
 {
     type Next = DKGOutput<C>;
 
@@ -160,8 +161,8 @@ where
         _: &mut B,
         responses: &'async_trait [BundledJustification<C>],
     ) -> NodeResult<Self::Next>
-    where
-        C: 'async_trait,
+        where
+            C: 'async_trait,
     {
         Ok(self.process_justifications(responses)?)
     }
@@ -169,7 +170,12 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use threshold_bls::{
+        curve::bls12381::{self, PairingCurve as BLS12_381},
+        poly::Idx,
+        sig::{BlindThresholdScheme, G1Scheme, G2Scheme, Scheme, SignatureScheme, ThresholdScheme},
+    };
+
     use crate::{
         primitives::{
             group::{Group, Node},
@@ -178,12 +184,8 @@ mod tests {
         test_helpers::InMemoryBoard,
     };
 
-    use threshold_bls::{
-        curve::bls12381::{self, PairingCurve as BLS12_381},
-        curve::zexe::{self as bls12_377, PairingCurve as BLS12_377},
-        poly::Idx,
-        sig::{BlindThresholdScheme, G1Scheme, G2Scheme, Scheme, SignatureScheme, ThresholdScheme},
-    };
+    use super::*;
+
     // helper to simulate a phase0 where a participant does not publish their
     // shares to the board
     fn bad_phase0<C: Curve, R: RngCore, P: Phase0<C>>(phase0: P, rng: &mut R) -> P::Next {
@@ -196,16 +198,13 @@ mod tests {
         let (t, n) = (3, 5);
         dkg_sign_e2e_curve::<bls12381::Curve, G1Scheme<BLS12_381>>(n, t).await;
         dkg_sign_e2e_curve::<bls12381::G2Curve, G2Scheme<BLS12_381>>(n, t).await;
-
-        dkg_sign_e2e_curve::<bls12_377::G1Curve, G1Scheme<BLS12_377>>(n, t).await;
-        dkg_sign_e2e_curve::<bls12_377::G2Curve, G2Scheme<BLS12_377>>(n, t).await;
     }
 
     async fn dkg_sign_e2e_curve<C, S>(n: usize, t: usize)
-    where
-        C: Curve,
+        where
+            C: Curve,
         // We need to bind the Curve's Point and Scalars to the Scheme
-        S: Scheme<Public = <C as Curve>::Point, Private = <C as Curve>::Scalar>
+            S: Scheme<Public=<C as Curve>::Point, Private=<C as Curve>::Scalar>
             + BlindThresholdScheme
             + ThresholdScheme
             + SignatureScheme,
@@ -238,10 +237,10 @@ mod tests {
     }
 
     async fn run_dkg<C, S>(n: usize, t: usize) -> Vec<DKGOutput<C>>
-    where
-        C: Curve,
+        where
+            C: Curve,
         // We need to bind the Curve's Point and Scalars to the Scheme
-        S: Scheme<Public = <C as Curve>::Point, Private = <C as Curve>::Scalar>,
+            S: Scheme<Public=<C as Curve>::Point, Private=<C as Curve>::Scalar>,
     {
         let rng = &mut rand::thread_rng();
 
@@ -290,7 +289,7 @@ mod tests {
         let honest = n - bad;
 
         let rng = &mut rand::thread_rng();
-        let (mut board, phase0s) = setup::<bls12_377::G1Curve, G1Scheme<BLS12_377>, _>(n, t, rng);
+        let (mut board, phase0s) = setup::<bls12381::Curve, G1Scheme<BLS12_381>, _>(n, t, rng);
 
         let mut phase1s = Vec::new();
         for (i, phase0) in phase0s.into_iter().enumerate() {
@@ -346,7 +345,7 @@ mod tests {
         let bad = 2; // >0 people not broadcasting in the start force us to go to phase 3
 
         let rng = &mut rand::thread_rng();
-        let (mut board, phase0s) = setup::<bls12_377::G1Curve, G1Scheme<BLS12_377>, _>(n, t, rng);
+        let (mut board, phase0s) = setup::<bls12381::Curve, G1Scheme<BLS12_381>, _>(n, t, rng);
 
         let mut phase1s = Vec::new();
         for (i, phase0) in phase0s.into_iter().enumerate() {
@@ -410,10 +409,10 @@ mod tests {
         t: usize,
         rng: &mut R,
     ) -> (InMemoryBoard<C>, Vec<joint_feldman::DKG<C>>)
-    where
-        C: Curve,
+        where
+            C: Curve,
         // We need to bind the Curve's Point and Scalars to the Scheme
-        S: Scheme<Public = <C as Curve>::Point, Private = <C as Curve>::Scalar>,
+            S: Scheme<Public=<C as Curve>::Point, Private=<C as Curve>::Scalar>,
     {
         // generate a keypair per participant
         let keypairs = (0..n).map(|_| S::keypair(rng)).collect::<Vec<_>>();
@@ -440,7 +439,7 @@ mod tests {
         (board, phase0s)
     }
 
-    fn is_all_same<T: PartialEq>(mut arr: impl Iterator<Item = T>) -> bool {
+    fn is_all_same<T: PartialEq>(mut arr: impl Iterator<Item=T>) -> bool {
         let first = arr.next().unwrap();
         arr.all(|item| item == first)
     }

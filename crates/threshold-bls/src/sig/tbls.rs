@@ -77,7 +77,7 @@ impl<I: SignatureScheme> ThresholdScheme for I {
         let valid_partials: Vec<Eval<Self::Signature>> = partials
             .iter()
             .map(|partial| {
-                let eval: Eval<Vec<u8>> = bincode::deserialize(&partial)?;
+                let eval: Eval<Vec<u8>> = bincode::deserialize(partial)?;
                 let sig = bincode::deserialize(&eval.value)?;
                 Ok(Eval {
                     index: eval.index,

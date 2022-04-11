@@ -1,11 +1,11 @@
 /// Primitives for grouping together vectors of nodes with an associated threshold
-pub(crate) mod group;
+pub mod group;
 pub use group::*;
 
 pub(crate) mod phases;
 pub use phases::*;
 
-pub(crate) mod types;
+pub mod types;
 pub use types::*;
 
 /// 2D binary array utilities for tracking successful (or not) participation in the DKG

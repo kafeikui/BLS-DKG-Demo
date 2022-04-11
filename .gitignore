@@ -20,3 +20,6 @@ react-native
 
 solidity/cache
 solidity/build
+
+.vscode
+.idea

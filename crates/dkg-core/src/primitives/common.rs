@@ -70,7 +70,7 @@ pub fn set_statuses<C: Curve>(
 /// evaluated at the given point.
 pub fn share_correct<C: Curve>(idx: Idx, share: &C::Scalar, public: &PublicPoly<C>) -> bool {
     let mut commit = C::Point::one();
-    commit.mul(&share);
+    commit.mul(share);
     let pub_eval = public.eval(idx);
     pub_eval.value == commit
 }
@@ -88,6 +88,7 @@ pub fn create_share_bundle<C: Curve, R: RngCore>(
         .nodes
         .iter()
         .map(|n| {
+            // println!("{}", n.id());
             // evaluate the secret polynomial at the node's id
             let sec = secret.eval(n.id() as Idx);
 
@@ -211,7 +212,7 @@ pub fn process_shares_get_all<C: Curve>(
             .ok()
         })
         .fold(ShareInfo::<C>::new(), |mut acc, (didx, share)| {
-            println!(" -- got new share from {}", didx);
+            // println!(" -- got new share from {}", didx);
             statuses.set(didx, my_idx, Status::Success);
             acc.insert(didx, share);
             acc

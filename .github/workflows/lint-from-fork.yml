@@ -12,14 +12,9 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v2
-      - name: Install Dependencies
-        run: |
-          mkdir -p "$HOME/bin"
-          wget -q https://github.com/ethereum/solidity/releases/download/v0.6.6/solc-static-linux -O $HOME/bin/solc
-          chmod u+x "$HOME/bin/solc"
-          echo "$HOME/bin" >> $GITHUB_PATH
-      - run: solc --version
+      - uses: actions/checkout@v3
+        with:
+          lfs: "true"
       - name: Format
         run: cargo fmt
       - name: Lint

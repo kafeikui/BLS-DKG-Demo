@@ -5,11 +5,11 @@ authors = ["wrs"]
 edition = "2018"
 
 [[bin]]
-name = "helloworld-server"
-path = "src/server.rs"
+name = "controller-server"
+path = "src/contract/server.rs"
 
 [[bin]]
-name = "helloworld-client"
+name = "node-client"
 path = "src/client.rs"
 
 [dependencies]
@@ -35,6 +35,7 @@ clt = "0.0.6"
 
 tonic = "0.6"
 prost = "0.9"
+parking_lot = "0.12.0"
 
 [build-dependencies]
 tonic-build = "0.6"

@@ -185,7 +185,7 @@ where
     let phase0 = DKG::new(private_key, group)?;
 
     // Run Phase 1 and publish to the chain
-    let phase1 = phase0.run(&mut dkg, rng).await?;
+    let phase1 = phase0.run(&mut dkg, rand::thread_rng).await?;
 
     // Wait for Phase 2
     wait_for_phase(&dkg, 2).await?;

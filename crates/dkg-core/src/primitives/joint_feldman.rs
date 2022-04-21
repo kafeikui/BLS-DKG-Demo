@@ -106,16 +106,20 @@ impl<C: Curve> Phase0<C> for DKG<C> {
     /// Evaluates the secret polynomial at the index of each DKG participant and encrypts
     /// the result with the corresponding public key. Returns the bundled encrypted shares
     /// as well as the next phase of the DKG.
-    fn encrypt_shares<R: RngCore>(
+    fn encrypt_shares<R, F>(
         self,
-        rng: &mut R,
-    ) -> DKGResult<(DKGWaitingShare<C>, Option<BundledShares<C>>)> {
+        rng: F,
+    ) -> DKGResult<(DKGWaitingShare<C>, Option<BundledShares<C>>)>
+    where
+        R: RngCore,
+        F: Fn() -> R,
+    {
         let bundle = create_share_bundle(
             self.info.index,
             &self.info.secret,
             &self.info.public,
             &self.info.group,
-            rng,
+            rng(),
         )?;
         let dw = DKGWaitingShare { info: self.info };
         Ok((dw, Some(bundle)))

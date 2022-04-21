@@ -10,7 +10,7 @@ use threshold_bls::group::Curve;
 
 /// Trait which must be implemented for writing to the board. This trait assumes
 /// an authenticated channel.
-#[async_trait(?Send)]
+#[async_trait]
 pub trait BoardPublisher<C>
 where
     C: Curve,
@@ -38,11 +38,11 @@ where
 }
 
 // Board implementation for all `Write` implementers, leveraging serde/bincode
-#[async_trait(?Send)]
+#[async_trait]
 impl<C, W> BoardPublisher<C> for W
 where
     C: Curve,
-    W: Write,
+    W: Write + std::marker::Send,
 {
     /// Error raised when trying to publish data to the board
     type Error = bincode::Error;

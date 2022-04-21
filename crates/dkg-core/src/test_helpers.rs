@@ -21,7 +21,7 @@ impl<C: Curve> InMemoryBoard<C> {
     }
 }
 
-#[async_trait(?Send)]
+#[async_trait]
 impl<C: Curve> BoardPublisher<C> for InMemoryBoard<C> {
     type Error = ();
 

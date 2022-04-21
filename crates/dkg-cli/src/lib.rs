@@ -23,7 +23,7 @@ pub enum DKGContractError<M: Middleware> {
     ProviderError(#[from] ProviderError),
 }
 
-#[async_trait(?Send)]
+#[async_trait]
 impl<C: Curve, M: ethers::providers::Middleware> BoardPublisher<C> for DKG<M> {
     type Error = DKGContractError<M>;
 

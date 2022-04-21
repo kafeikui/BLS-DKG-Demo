@@ -134,10 +134,14 @@ impl<C: Curve> RDKG<C> {
 
 impl<C: Curve> Phase0<C> for RDKG<C> {
     type Next = RDKGWaitingShare<C>;
-    fn encrypt_shares<R: RngCore>(
+    fn encrypt_shares<R, F>(
         self,
-        rng: &mut R,
-    ) -> DKGResult<(RDKGWaitingShare<C>, Option<BundledShares<C>>)> {
+        rng: F,
+    ) -> DKGResult<(RDKGWaitingShare<C>, Option<BundledShares<C>>)>
+    where
+        R: RngCore,
+        F: Fn() -> R,
+    {
         if !self.info.is_dealer() {
             return Ok((RDKGWaitingShare { info: self.info }, None));
         }
@@ -149,7 +153,7 @@ impl<C: Curve> Phase0<C> for RDKG<C> {
             &secret,
             &public,
             &info.new_group,
-            rng,
+            rng(),
         )?;
         let dw = RDKGWaitingShare {
             info: ReshareInfo {

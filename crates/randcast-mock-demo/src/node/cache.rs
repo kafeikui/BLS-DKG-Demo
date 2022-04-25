@@ -17,6 +17,7 @@ pub trait BlockInfoUpdater {
     fn set_block_height(&mut self, block_height: usize);
 }
 
+#[derive(Default)]
 pub struct InMemoryBlockInfoCache {
     block_height: usize,
 }
@@ -24,12 +25,6 @@ pub struct InMemoryBlockInfoCache {
 impl InMemoryBlockInfoCache {
     pub fn new() -> Self {
         InMemoryBlockInfoCache { block_height: 0 }
-    }
-}
-
-impl Default for InMemoryBlockInfoCache {
-    fn default() -> Self {
-        Self::new()
     }
 }
 
@@ -132,6 +127,7 @@ pub trait GroupInfoFetcher {
     fn get_dkg_start_block_height(&self) -> NodeResult<usize>;
 }
 
+#[derive(Default)]
 pub struct InMemoryGroupInfoCache {
     share: Option<Share<Scalar>>,
 
@@ -160,12 +156,6 @@ impl InMemoryGroupInfoCache {
         }
 
         Ok(())
-    }
-}
-
-impl Default for InMemoryGroupInfoCache {
-    fn default() -> Self {
-        Self::new()
     }
 }
 

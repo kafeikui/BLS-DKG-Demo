@@ -172,45 +172,15 @@ impl Transactions for Coordinator {
 
 impl Views for Coordinator {
     fn get_shares(&self) -> CoordinatorResult<Vec<Vec<u8>>> {
-        Ok(self
-            .participants
-            .iter()
-            .map(|id_address| {
-                self.shares
-                    .get(id_address)
-                    .cloned()
-                    .or(Some(vec![]))
-                    .unwrap()
-            })
-            .collect::<Vec<_>>())
+        Ok(self.shares.values().cloned().collect::<Vec<_>>())
     }
 
     fn get_responses(&self) -> CoordinatorResult<Vec<Vec<u8>>> {
-        Ok(self
-            .participants
-            .iter()
-            .map(|id_address| {
-                self.responses
-                    .get(id_address)
-                    .cloned()
-                    .or(Some(vec![]))
-                    .unwrap()
-            })
-            .collect::<Vec<_>>())
+        Ok(self.responses.values().cloned().collect::<Vec<_>>())
     }
 
     fn get_justifications(&self) -> CoordinatorResult<Vec<Vec<u8>>> {
-        Ok(self
-            .participants
-            .iter()
-            .map(|id_address| {
-                self.justifications
-                    .get(id_address)
-                    .cloned()
-                    .or(Some(vec![]))
-                    .unwrap()
-            })
-            .collect::<Vec<_>>())
+        Ok(self.justifications.values().cloned().collect::<Vec<_>>())
     }
 
     fn get_participants(&self) -> CoordinatorResult<Vec<String>> {
@@ -218,11 +188,7 @@ impl Views for Coordinator {
     }
 
     fn get_bls_keys(&self) -> CoordinatorResult<(usize, Vec<Vec<u8>>)> {
-        let keys = self
-            .participants
-            .iter()
-            .map(|id_address| self.keys.get(id_address).cloned().or(Some(vec![])).unwrap())
-            .collect::<Vec<_>>();
+        let keys = self.keys.values().cloned().collect::<Vec<_>>();
 
         Ok((self.threshold, keys))
     }

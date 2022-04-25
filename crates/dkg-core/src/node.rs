@@ -193,7 +193,7 @@ mod tests {
 
     // helper to simulate a phase0 where a participant does not publish their
     // shares to the board
-    fn bad_phase0<C: Curve, R: RngCore, F: Fn() -> R, P: Phase0<C>>(phase0: P, rng: F) -> P::Next {
+    fn bad_phase0<C: Curve, R: RngCore, P: Phase0<C>>(phase0: P, rng: fn() -> R) -> P::Next {
         let (next, _) = phase0.encrypt_shares(rng).unwrap();
         next
     }

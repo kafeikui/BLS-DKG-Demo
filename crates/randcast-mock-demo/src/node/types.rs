@@ -21,6 +21,7 @@ pub struct DKGTask {
     pub coordinator_address: String,
 }
 
+#[derive(Default)]
 pub struct Group {
     pub index: usize,
     pub epoch: usize,
@@ -44,12 +45,6 @@ impl Group {
             members: HashMap::new(),
             committers: vec![],
         }
-    }
-}
-
-impl Default for Group {
-    fn default() -> Self {
-        Self::new()
     }
 }
 

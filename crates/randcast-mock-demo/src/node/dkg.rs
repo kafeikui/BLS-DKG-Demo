@@ -13,7 +13,10 @@ use dkg_core::{
 use parking_lot::RwLock;
 use rand::RngCore;
 use rustc_hex::ToHex;
-use std::{io::Write, sync::Arc};
+use std::{
+    io::{self, Write},
+    sync::Arc,
+};
 use threshold_bls::{
     curve::bls12381::{Curve, Scalar, G1},
     poly::Idx,
@@ -40,7 +43,7 @@ pub struct MockDKGCore {}
 impl<F, R> DKGCore<F, R> for MockDKGCore
 where
     R: RngCore,
-    F: Fn() -> R + Send,
+    F: Fn() -> R,
 {
     async fn run_dkg(
         &mut self,
@@ -51,7 +54,7 @@ where
         group_info_fetcher: Arc<RwLock<impl GroupInfoFetcher + Send + Sync + 'async_trait>>,
     ) -> NodeResult<DKGOutput<Curve>>
     where
-        F: 'async_trait,
+        F: Send + 'async_trait,
     {
         // TODO
         let coordinator_address = String::from("http://[::1]:50052");
@@ -159,12 +162,12 @@ where
             Ok(output) => {
                 println!("Success. Your share and threshold pubkey are ready.");
 
-                // TODO Why isn't it working?
-                // write_output(std::io::stdout(), &output)?;
+                write_output(std::io::stdout(), &output)?;
+                println!("");
 
-                println!("{:#?}", output);
+                // println!("{:#?}", output);
 
-                println!("public key: {}", output.public.public_key());
+                // println!("public key: {}", output.public.public_key());
 
                 Ok(output)
             }
@@ -203,6 +206,7 @@ async fn wait_for_phase(dkg: &mut impl CoordinatorViews, num: usize) -> NodeResu
         }
 
         print!(".");
+        io::stdout().flush().unwrap();
 
         // 1s for demonstration
         tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
@@ -221,13 +225,14 @@ fn parse_bundle<D: serde::de::DeserializeOwned>(bundle: &[Vec<u8>]) -> NodeResul
         .collect()
 }
 
-fn _write_output<W: Write>(writer: W, out: &DKGOutput<Curve>) -> NodeResult<()> {
+fn write_output<W: Write>(writer: W, out: &DKGOutput<Curve>) -> NodeResult<()> {
     let output = OutputJson {
         public_key: hex::encode(&bincode::serialize(&out.public.public_key())?),
         public_polynomial: hex::encode(&bincode::serialize(&out.public)?),
         share: hex::encode(&bincode::serialize(&out.share)?),
     };
     serde_json::to_writer(writer, &output)?;
+
     Ok(())
 }
 

@@ -15,6 +15,7 @@ use async_trait::async_trait;
 use futures::TryFutureExt;
 use parking_lot::RwLock;
 use rand::RngCore;
+use std::io::{self, Write};
 use std::sync::Arc;
 
 pub const DEFAULT_DKG_TIMEOUT_DURATION: usize = 30 * 3;
@@ -127,6 +128,7 @@ impl<F: Fn() -> R + Send + Sync + Copy + 'static, R: RngCore + 'static>
                 }
             }
             print!(".");
+            io::stdout().flush().unwrap();
 
             tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
         }

@@ -17,9 +17,14 @@ use threshold_bls::sig::Scheme;
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     static RNG_FN: fn() -> ThreadRng = rand::thread_rng;
 
-    let args: Vec<String> = env::args().collect();
+    let mut args = env::args();
 
-    let id_address = &args[1];
+    args.next();
+
+    let id_address = match args.next() {
+        Some(arg) => arg,
+        None => panic!("Didn't get a id_address string"),
+    };
 
     println!("id_address: {}", id_address);
 

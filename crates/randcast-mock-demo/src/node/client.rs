@@ -1,11 +1,16 @@
 use std::collections::HashMap;
 
+use self::committer::committer_service_client::CommitterServiceClient;
+use self::committer::CommitPartialSignatureRequest;
 use self::controller::{
     transactions_client::TransactionsClient as ControllerTransactionsClient,
     views_client::ViewsClient as ControllerViewsClient, CheckDkgStateRequest, CommitDkgRequest,
     GetGroupRequest, GroupReply, Member, NodeRegisterRequest,
 };
-use self::controller::{DkgTaskReply, MineRequest};
+use self::controller::{
+    DkgTaskReply, FulfillRandomnessRequest, GetSignatureTaskCompletionStateRequest, MineRequest,
+    RequestRandomnessRequest, SignatureTaskReply,
+};
 use self::coordinator::transactions_client::TransactionsClient as CoordinatorTransactionsClient;
 use self::coordinator::views_client::ViewsClient as CoordinatorViewsClient;
 use self::coordinator::{BlsKeysReply, PublishRequest};
@@ -17,10 +22,10 @@ use dkg_core::{
 use thiserror::Error;
 use threshold_bls::curve::bls12381::Curve;
 use tonic::metadata::MetadataValue;
-use tonic::Request;
+use tonic::{Code, Request};
 
 use super::errors::{NodeError, NodeResult};
-use super::types::{DKGTask, Group, Member as ModelMember};
+use super::types::{DKGTask, Group, Member as ModelMember, SignatureTask};
 
 pub mod controller {
     include!("../../stub/controller.rs");
@@ -28,6 +33,19 @@ pub mod controller {
 
 pub mod coordinator {
     include!("../../stub/coordinator.rs");
+}
+
+pub mod committer {
+    include!("../../stub/committer.rs");
+}
+
+#[async_trait]
+pub trait CommitterService {
+    async fn commit_partial_signature(
+        &mut self,
+        signature_index: usize,
+        partial_signature: Vec<u8>,
+    ) -> NodeResult<bool>;
 }
 
 #[async_trait]
@@ -44,6 +62,16 @@ pub trait ControllerTransactions {
     ) -> NodeResult<()>;
 
     async fn check_dkg_state(&mut self, group_index: usize) -> NodeResult<()>;
+
+    async fn request_randomness(&mut self, message: &str) -> NodeResult<()>;
+
+    async fn fulfill_randomness(
+        &mut self,
+        group_index: usize,
+        signature_index: usize,
+        signature: Vec<u8>,
+        partial_signatures: HashMap<String, Vec<u8>>,
+    ) -> NodeResult<()>;
 }
 
 #[async_trait]
@@ -51,11 +79,17 @@ pub trait ControllerMockHelper {
     async fn mine(&mut self, block_number_increment: usize) -> NodeResult<usize>;
 
     async fn emit_dkg_task(&mut self) -> NodeResult<DKGTask>;
+
+    async fn emit_signature_task(&mut self) -> NodeResult<SignatureTask>;
 }
 
 #[async_trait]
 pub trait ControllerViews {
     async fn get_group(&mut self, group_index: usize) -> NodeResult<Group>;
+
+    async fn get_last_output(&mut self) -> NodeResult<u64>;
+
+    async fn get_signature_task_completion_state(&mut self, index: usize) -> NodeResult<bool>;
 }
 
 #[async_trait]
@@ -90,6 +124,48 @@ pub trait CoordinatorViews {
     async fn in_phase(&mut self) -> NodeResult<usize>;
 }
 
+pub struct MockCommitterClient {
+    id_address: String,
+    committer_service_client: CommitterServiceClient<tonic::transport::Channel>,
+}
+
+impl MockCommitterClient {
+    pub async fn new(
+        id_address: String,
+        committer_endpoint: String,
+    ) -> NodeResult<MockCommitterClient> {
+        let committer_service_client: CommitterServiceClient<tonic::transport::Channel> =
+            CommitterServiceClient::connect(format!("{}{}", "http://", committer_endpoint.clone()))
+                .await?;
+
+        Ok(MockCommitterClient {
+            id_address,
+            committer_service_client,
+        })
+    }
+}
+
+#[async_trait]
+impl CommitterService for MockCommitterClient {
+    async fn commit_partial_signature(
+        &mut self,
+        signature_index: usize,
+        partial_signature: Vec<u8>,
+    ) -> NodeResult<bool> {
+        let request = Request::new(CommitPartialSignatureRequest {
+            id_address: self.id_address.to_string(),
+            signature_index: signature_index as u32,
+            partial_signature,
+        });
+
+        self.committer_service_client
+            .commit_partial_signature(request)
+            .await
+            .map(|r| r.into_inner().result)
+            .map_err(|status| status.into())
+    }
+}
+
 pub struct MockControllerClient {
     id_address: String,
     transactions_client: ControllerTransactionsClient<tonic::transport::Channel>,
@@ -98,14 +174,20 @@ pub struct MockControllerClient {
 
 impl MockControllerClient {
     pub async fn new(
-        controller_address: String,
+        controller_rpc_endpoint: String,
         id_address: String,
     ) -> NodeResult<MockControllerClient> {
         let transactions_client: ControllerTransactionsClient<tonic::transport::Channel> =
-            ControllerTransactionsClient::connect(controller_address.clone()).await?;
+            ControllerTransactionsClient::connect(format!(
+                "{}{}",
+                "http://",
+                controller_rpc_endpoint.clone()
+            ))
+            .await?;
 
         let views_client: ControllerViewsClient<tonic::transport::Channel> =
-            ControllerViewsClient::connect(controller_address).await?;
+            ControllerViewsClient::connect(format!("{}{}", "http://", controller_rpc_endpoint))
+                .await?;
 
         Ok(MockControllerClient {
             id_address,
@@ -166,6 +248,40 @@ impl ControllerTransactions for MockControllerClient {
             .map(|r| r.into_inner())
             .map_err(|status| status.into())
     }
+
+    async fn request_randomness(&mut self, message: &str) -> NodeResult<()> {
+        let request = Request::new(RequestRandomnessRequest {
+            message: message.to_string(),
+        });
+
+        self.transactions_client
+            .request_randomness(request)
+            .await
+            .map(|r| r.into_inner())
+            .map_err(|status| status.into())
+    }
+
+    async fn fulfill_randomness(
+        &mut self,
+        group_index: usize,
+        signature_index: usize,
+        signature: Vec<u8>,
+        partial_signatures: HashMap<String, Vec<u8>>,
+    ) -> NodeResult<()> {
+        let request = Request::new(FulfillRandomnessRequest {
+            id_address: self.id_address.to_string(),
+            group_index: group_index as u32,
+            signature_index: signature_index as u32,
+            signature,
+            partial_signatures,
+        });
+
+        self.transactions_client
+            .fulfill_randomness(request)
+            .await
+            .map(|r| r.into_inner())
+            .map_err(|status| status.into())
+    }
 }
 
 #[async_trait]
@@ -216,6 +332,32 @@ impl ControllerMockHelper for MockControllerClient {
             })
             .map_err(|status| status.into())
     }
+
+    async fn emit_signature_task(&mut self) -> NodeResult<SignatureTask> {
+        let request = Request::new(());
+        self.views_client
+            .emit_signature_task(request)
+            .await
+            .map(|r| {
+                let SignatureTaskReply {
+                    index,
+                    message,
+                    group_index,
+                    assignment_block_height,
+                } = r.into_inner();
+
+                SignatureTask {
+                    index: index as usize,
+                    message,
+                    group_index: group_index as usize,
+                    assignment_block_height: assignment_block_height as usize,
+                }
+            })
+            .map_err(|status| match status.code() {
+                Code::NotFound => NodeError::NoTaskAvailable,
+                _ => status.into(),
+            })
+    }
 }
 
 #[async_trait]
@@ -265,6 +407,36 @@ impl ControllerViews for MockControllerClient {
             })
             .map_err(|status| status.into())
     }
+
+    async fn get_last_output(&mut self) -> NodeResult<u64> {
+        let request = Request::new(());
+
+        self.views_client
+            .get_last_output(request)
+            .await
+            .map(|r| {
+                let last_output_reply = r.into_inner();
+
+                last_output_reply.last_output
+            })
+            .map_err(|status| status.into())
+    }
+
+    async fn get_signature_task_completion_state(&mut self, index: usize) -> NodeResult<bool> {
+        let request = Request::new(GetSignatureTaskCompletionStateRequest {
+            index: index as u32,
+        });
+
+        self.views_client
+            .get_signature_task_completion_state(request)
+            .await
+            .map(|r| {
+                let reply = r.into_inner();
+
+                reply.state
+            })
+            .map_err(|status| status.into())
+    }
 }
 
 impl From<Member> for ModelMember {
@@ -278,6 +450,7 @@ impl From<Member> for ModelMember {
         ModelMember {
             index: member.index as usize,
             id_address: member.id_address,
+            rpc_endpint: None,
             partial_public_key,
         }
     }
@@ -299,10 +472,16 @@ impl MockCoordinatorClient {
         epoch: usize,
     ) -> NodeResult<MockCoordinatorClient> {
         let transactions_client: CoordinatorTransactionsClient<tonic::transport::Channel> =
-            CoordinatorTransactionsClient::connect(coordinator_address.clone()).await?;
+            CoordinatorTransactionsClient::connect(format!(
+                "{}{}",
+                "http://",
+                coordinator_address.clone()
+            ))
+            .await?;
 
         let views_client: CoordinatorViewsClient<tonic::transport::Channel> =
-            CoordinatorViewsClient::connect(coordinator_address).await?;
+            CoordinatorViewsClient::connect(format!("{}{}", "http://", coordinator_address))
+                .await?;
 
         Ok(MockCoordinatorClient {
             id_address,

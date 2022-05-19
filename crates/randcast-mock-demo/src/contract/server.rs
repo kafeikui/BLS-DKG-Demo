@@ -15,17 +15,21 @@ use self::coordinator::{
     BlsKeysReply, InPhaseReply, JustificationsReply, ParticipantsReply, PublishRequest,
     ResponsesReply, SharesReply,
 };
-use controller::{DkgTaskReply, MineReply, MineRequest};
+use controller::{
+    DkgTaskReply, FulfillRandomnessRequest, GetSignatureTaskCompletionStateReply,
+    GetSignatureTaskCompletionStateRequest, LastOutputReply, MineReply, MineRequest,
+    RequestRandomnessRequest, SignatureTaskReply,
+};
 use parking_lot::RwLock;
 use randcast_mock_demo::contract::{
     controller::{
-        Controller, DKGTask, Group, Member as ModelMember, MockHelper,
+        Controller, DKGTask, Group, Member as ModelMember, MockHelper, SignatureTask,
         Transactions as ModelControllerTrxs, Views as ModelControllerViews,
     },
     coordinator::{Transactions, Views},
     errors::ControllerError,
 };
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, env, sync::Arc};
 use tonic::{transport::Server, Request, Response, Status};
 
 pub mod controller {
@@ -119,6 +123,38 @@ impl ControllerTransactions for MockController {
                 req.public_key,
                 req.partial_public_key,
                 req.disqualified_nodes,
+            )
+            .map(|()| Response::new(()))
+            .map_err(|e| Status::internal(e.to_string()))
+    }
+
+    async fn request_randomness(
+        &self,
+        request: Request<RequestRandomnessRequest>,
+    ) -> Result<Response<()>, Status> {
+        let req = request.into_inner();
+
+        self.controller
+            .write()
+            .request_randomness(&req.message)
+            .map(|()| Response::new(()))
+            .map_err(|e| Status::internal(e.to_string()))
+    }
+
+    async fn fulfill_randomness(
+        &self,
+        request: Request<FulfillRandomnessRequest>,
+    ) -> Result<Response<()>, Status> {
+        let req = request.into_inner();
+
+        self.controller
+            .write()
+            .fulfill_randomness(
+                &req.id_address,
+                req.group_index as usize,
+                req.signature_index as usize,
+                req.signature,
+                req.partial_signatures,
             )
             .map(|()| Response::new(()))
             .map_err(|e| Status::internal(e.to_string()))
@@ -221,7 +257,56 @@ impl ControllerViews for MockController {
                     coordinator_address,
                 })
             })
-            .map_err(|e| Status::internal(e.to_string()))
+            .map_err(|e| Status::not_found(e.to_string()))
+    }
+
+    async fn emit_signature_task(
+        &self,
+        _request: Request<()>,
+    ) -> Result<Response<SignatureTaskReply>, Status> {
+        self.controller
+            .read()
+            .emit_signature_task()
+            .map(|signature_task| {
+                let SignatureTask {
+                    index,
+                    message,
+                    group_index,
+                    assignment_block_height,
+                } = signature_task;
+
+                Response::new(SignatureTaskReply {
+                    index: index as u32,
+                    message,
+                    group_index: group_index as u32,
+                    assignment_block_height: assignment_block_height as u32,
+                })
+            })
+            .map_err(|e| Status::not_found(e.to_string()))
+    }
+
+    async fn get_last_output(
+        &self,
+        _request: Request<()>,
+    ) -> Result<Response<LastOutputReply>, Status> {
+        let last_output = self.controller.read().get_last_output();
+        return Ok(Response::new(LastOutputReply { last_output }));
+    }
+
+    async fn get_signature_task_completion_state(
+        &self,
+        request: Request<GetSignatureTaskCompletionStateRequest>,
+    ) -> Result<Response<GetSignatureTaskCompletionStateReply>, Status> {
+        let req = request.into_inner();
+
+        let state = self
+            .controller
+            .read()
+            .get_signature_task_completion_state(req.index as usize);
+
+        return Ok(Response::new(GetSignatureTaskCompletionStateReply {
+            state,
+        }));
     }
 }
 
@@ -364,7 +449,16 @@ impl From<ModelMember> for Member {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let addr = "[::1]:50052".parse()?;
+    let mut args = env::args();
+
+    args.next();
+
+    let controller_rpc_endpoint = match args.next() {
+        Some(arg) => arg,
+        None => panic!("Didn't get a controller rpc endpoint string"),
+    };
+
+    let addr = controller_rpc_endpoint.parse()?;
     let initial_entropy = 0x8762_4875_6548_6346;
 
     println!(
@@ -372,7 +466,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         initial_entropy
     );
 
-    let controller = Controller::new(initial_entropy);
+    let controller = Controller::new(initial_entropy, controller_rpc_endpoint);
 
     let arc = Arc::new(RwLock::new(controller));
 

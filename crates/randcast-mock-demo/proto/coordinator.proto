@@ -5,7 +5,7 @@ import "google/protobuf/empty.proto";
 package coordinator;
 
 service Transactions {
-  rpc publish(PublishRequest) returns (google.protobuf.Empty);
+  rpc Publish(PublishRequest) returns (google.protobuf.Empty);
 }
 
 message PublishRequest {

@@ -108,7 +108,7 @@ pub mod transactions_client {
                 )
             })?;
             let codec = tonic::codec::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static("/coordinator.Transactions/publish");
+            let path = http::uri::PathAndQuery::from_static("/coordinator.Transactions/Publish");
             self.inner.unary(request.into_request(), path, codec).await
         }
     }
@@ -310,10 +310,10 @@ pub mod transactions_server {
         fn call(&mut self, req: http::Request<B>) -> Self::Future {
             let inner = self.inner.clone();
             match req.uri().path() {
-                "/coordinator.Transactions/publish" => {
+                "/coordinator.Transactions/Publish" => {
                     #[allow(non_camel_case_types)]
-                    struct publishSvc<T: Transactions>(pub Arc<T>);
-                    impl<T: Transactions> tonic::server::UnaryService<super::PublishRequest> for publishSvc<T> {
+                    struct PublishSvc<T: Transactions>(pub Arc<T>);
+                    impl<T: Transactions> tonic::server::UnaryService<super::PublishRequest> for PublishSvc<T> {
                         type Response = ();
                         type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
                         fn call(
@@ -330,7 +330,7 @@ pub mod transactions_server {
                     let inner = self.inner.clone();
                     let fut = async move {
                         let inner = inner.0;
-                        let method = publishSvc(inner);
+                        let method = PublishSvc(inner);
                         let codec = tonic::codec::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec).apply_compression_config(
                             accept_compression_encodings,

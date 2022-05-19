@@ -186,7 +186,7 @@ where
 
     // Instantiate the DKG with the group info
     println!("Calculating and broadcasting our shares...");
-    let phase0 = DKG::new(private_key, group)?;
+    let phase0 = DKG::new(private_key, String::from(""), group)?;
 
     // Run Phase 1 and publish to the chain
     let phase1 = phase0.run(&mut dkg, rand::thread_rng).await?;

@@ -435,7 +435,9 @@ mod tests {
         // Create the Phase 0 for each participant
         let phase0s = keypairs
             .iter()
-            .map(|(private, _)| joint_feldman::DKG::new(private.clone(), group.clone()).unwrap())
+            .map(|(private, _)| {
+                joint_feldman::DKG::new(private.clone(), String::from(""), group.clone()).unwrap()
+            })
             .collect::<Vec<_>>();
 
         // Create the board

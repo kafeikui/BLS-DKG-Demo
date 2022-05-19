@@ -7,11 +7,11 @@ use threshold_bls::{group::Curve, poly::Idx};
 /// of the protocol, if sucessful, the index is used to verify the validity of
 /// the share this node holds.
 #[derive(Clone, Serialize, Deserialize, PartialEq, Debug)]
-pub struct Node<C: Curve>(Idx, C::Point);
+pub struct Node<C: Curve>(Idx, C::Point, Option<String>);
 
 impl<C: Curve> Node<C> {
     pub fn new(index: Idx, public: C::Point) -> Self {
-        Self(index, public)
+        Self(index, public, None)
     }
 }
 
@@ -24,6 +24,14 @@ impl<C: Curve> Node<C> {
     /// Returns the node's public key
     pub fn key(&self) -> &C::Point {
         &self.1
+    }
+
+    pub fn set_rpc_endpoint(&mut self, rpc_endpoint: String) {
+        self.2 = Some(rpc_endpoint);
+    }
+
+    pub fn get_rpc_endpoint(&self) -> Option<&String> {
+        self.2.as_ref()
     }
 }
 

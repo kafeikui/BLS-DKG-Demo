@@ -152,6 +152,7 @@ impl<C: Curve> Phase0<C> for RDKG<C> {
             info.prev_index.unwrap(),
             &secret,
             &public,
+            "",
             &info.new_group,
             rng(),
         )?;
@@ -239,7 +240,7 @@ impl<C: Curve> Phase1<C> for RDKGWaitingShare<C> {
             let secret = info.secret.take().unwrap();
             // we register our own share and publics into the mix
             let didx = info.prev_index.unwrap();
-            shares.insert(didx, secret.eval(didx).value);
+            shares.insert(didx, (secret.eval(didx).value, "".to_string()));
             publics.insert(didx, public.clone());
             // we treat our own share as valid!
             statuses.set(didx, my_idx, Status::Success);
@@ -423,7 +424,7 @@ fn compute_resharing_output<C: Curve>(
     // to compute the final share, we interpolate all the valid shares received
     let mut shares_eval: Vec<Eval<C::Scalar>> = shares
         .into_iter()
-        .map(|(idx, sh)| Eval {
+        .map(|(idx, (sh, _))| Eval {
             value: sh,
             index: idx,
         })
@@ -627,6 +628,7 @@ mod tests {
                 s[target_idx].dealer_idx,
                 &nsecret,
                 &npublic,
+                "",
                 &group,
                 &mut thread_rng(),
             )

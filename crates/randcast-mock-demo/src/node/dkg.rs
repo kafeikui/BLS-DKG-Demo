@@ -27,9 +27,10 @@ pub trait DKGCore<F, R> {
     async fn run_dkg(
         &mut self,
         dkg_private_key: Scalar,
-        id_address: String,
+        node_rpc_endpoint: String,
         task: DKGTask,
         rng: F,
+        coordinator_client: MockCoordinatorClient,
         group_info_fetcher: Arc<RwLock<impl GroupInfoFetcher + Send + Sync + 'async_trait>>,
     ) -> NodeResult<DKGOutput<Curve>>
     where
@@ -48,37 +49,27 @@ where
     async fn run_dkg(
         &mut self,
         dkg_private_key: Scalar,
-        id_address: String,
+        node_rpc_endpoint: String,
         task: DKGTask,
         rng: F,
+        mut coordinator_client: MockCoordinatorClient,
         group_info_fetcher: Arc<RwLock<impl GroupInfoFetcher + Send + Sync + 'async_trait>>,
     ) -> NodeResult<DKGOutput<Curve>>
     where
         F: Send + 'async_trait,
     {
-        // TODO
-        let coordinator_address = String::from("http://[::1]:50052");
-
-        let mut dkg = MockCoordinatorClient::new(
-            coordinator_address,
-            id_address,
-            task.group_index,
-            task.epoch,
-        )
-        .await?;
-
         // 1. Generate the keys
         // let (private_key, public_key) = S::keypair(rng);
 
         // 2. no need to register, just wait for phase1 for now
 
         // Wait for Phase 1
-        wait_for_phase(&mut dkg, 1).await?;
+        wait_for_phase(&mut coordinator_client, 1).await?;
         check_epoch_valid(&task, group_info_fetcher.clone())?;
 
         // Get the group info
-        let group = dkg.get_bls_keys().await?;
-        let participants = dkg.get_participants().await?;
+        let group = coordinator_client.get_bls_keys().await?;
+        let participants = coordinator_client.get_participants().await?;
 
         // print some debug info
         println!(
@@ -117,42 +108,42 @@ where
 
         // Instantiate the DKG with the group info
         println!("Calculating and broadcasting our shares...");
-        let phase0 = DKG::new(dkg_private_key, group)?;
+        let phase0 = DKG::new(dkg_private_key, node_rpc_endpoint, group)?;
 
         // Run Phase 1 and publish to the chain
-        let phase1 = phase0.run(&mut dkg, rng).await?;
+        let phase1 = phase0.run(&mut coordinator_client, rng).await?;
 
         // Wait for Phase 2
-        wait_for_phase(&mut dkg, 2).await?;
+        wait_for_phase(&mut coordinator_client, 2).await?;
         check_epoch_valid(&task, group_info_fetcher.clone())?;
 
         // Get the shares
-        let shares = dkg.get_shares().await?;
+        let shares = coordinator_client.get_shares().await?;
         println!("Got {} shares...", shares.len());
         let shares = parse_bundle(&shares)?;
         println!("Parsed {} shares. Running Phase 2", shares.len());
 
-        let phase2 = phase1.run(&mut dkg, &shares).await?;
+        let phase2 = phase1.run(&mut coordinator_client, &shares).await?;
 
         // Get the responses
-        let responses = dkg.get_responses().await?;
+        let responses = coordinator_client.get_responses().await?;
         println!("Got {} responses...", responses.len());
         let responses = parse_bundle(&responses)?;
         println!("Parsed the responses. Getting result.");
 
         // Run Phase 2
-        let result = match phase2.run(&mut dkg, &responses).await? {
+        let result = match phase2.run(&mut coordinator_client, &responses).await? {
             Phase2Result::Output(out) => Ok(out),
             // Run Phase 3 if Phase 2 errored
             Phase2Result::GoToPhase3(phase3) => {
                 println!("There were complaints. Running Phase 3.");
-                wait_for_phase(&mut dkg, 3).await?;
+                wait_for_phase(&mut coordinator_client, 3).await?;
                 check_epoch_valid(&task, group_info_fetcher.clone())?;
 
-                let justifications = dkg.get_justifications().await?;
+                let justifications = coordinator_client.get_justifications().await?;
                 let justifications = parse_bundle(&justifications)?;
 
-                phase3.run(&mut dkg, &justifications).await
+                phase3.run(&mut coordinator_client, &justifications).await
             }
         };
 
@@ -163,9 +154,9 @@ where
                 println!("Success. Your share and threshold pubkey are ready.");
 
                 write_output(std::io::stdout(), &output)?;
-                println!("");
+                println!();
 
-                // println!("{:#?}", output);
+                // println!("{:#?}", output.qual.nodes);
 
                 // println!("public key: {}", output.public.public_key());
 

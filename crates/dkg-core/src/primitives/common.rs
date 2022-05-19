@@ -13,7 +13,7 @@ use threshold_bls::{
     poly::{Idx, PrivatePoly, PublicPoly},
 };
 
-pub type ShareInfo<C> = HashMap<Idx, <C as Curve>::Scalar>;
+pub type ShareInfo<C> = HashMap<Idx, (<C as Curve>::Scalar, String)>;
 pub type PublicInfo<C> = HashMap<Idx, PublicPoly<C>>;
 
 pub fn decrypt_and_check_share<C: Curve>(
@@ -22,7 +22,7 @@ pub fn decrypt_and_check_share<C: Curve>(
     dealer_idx: Idx,
     public: &PublicPoly<C>,
     share: &EncryptedShare<C>,
-) -> Result<C::Scalar, DKGError> {
+) -> Result<(C::Scalar, String), DKGError> {
     let buff = ecies::decrypt::<C>(private_key, &share.secret).map_err(|err| {
         println!("ERROR {:?}", err);
         ShareError::InvalidCiphertext(dealer_idx, err)
@@ -35,7 +35,15 @@ pub fn decrypt_and_check_share<C: Curve>(
         return Err(ShareError::InvalidShare(dealer_idx).into());
     }
 
-    Ok(clear_share)
+    let rpc_endpoint_buff =
+        ecies::decrypt::<C>(private_key, &share.rpc_endpoint_secret).map_err(|err| {
+            println!("ERROR {:?}", err);
+            ShareError::InvalidCiphertext(dealer_idx, err)
+        })?;
+
+    let clear_rpc_endpoint = bincode::deserialize(&rpc_endpoint_buff)?;
+
+    Ok((clear_share, clear_rpc_endpoint))
 }
 
 /// set_statuses set the status of the given responses on the status matrix.
@@ -81,6 +89,7 @@ pub fn create_share_bundle<C: Curve, R: RngCore>(
     dealer_idx: Idx,
     secret: &PrivatePoly<C>,
     public: &PublicPoly<C>,
+    node_rpc_endpoint: &str,
     group: &Group<C>,
     mut rng: R,
 ) -> DKGResult<BundledShares<C>> {
@@ -98,10 +107,15 @@ pub fn create_share_bundle<C: Curve, R: RngCore>(
             // encrypt it
             let cipher = ecies::encrypt::<C, _>(n.key(), &buff, &mut rng);
 
+            let rpc_endpoint_buff = bincode::serialize(node_rpc_endpoint)?;
+
+            let rpc_endpoint_secret = ecies::encrypt::<C, _>(n.key(), &rpc_endpoint_buff, &mut rng);
+
             // save the share
             Ok(EncryptedShare {
                 share_idx: n.id(),
                 secret: cipher,
+                rpc_endpoint_secret,
             })
         })
         .collect::<Result<Vec<_>, DKGError>>()?;
@@ -211,12 +225,15 @@ pub fn process_shares_get_all<C: Curve>(
             .map(|share| (bundle.dealer_idx, share))
             .ok()
         })
-        .fold(ShareInfo::<C>::new(), |mut acc, (didx, share)| {
-            // println!(" -- got new share from {}", didx);
-            statuses.set(didx, my_idx, Status::Success);
-            acc.insert(didx, share);
-            acc
-        });
+        .fold(
+            ShareInfo::<C>::new(),
+            |mut acc, (didx, (share, rpc_endpoint))| {
+                // println!(" -- got new share from {}", didx);
+                statuses.set(didx, my_idx, Status::Success);
+                acc.insert(didx, (share, rpc_endpoint));
+                acc
+            },
+        );
 
     Ok((valid_shares, publics, statuses))
 }
@@ -286,7 +303,10 @@ pub fn internal_process_justifications<C: Curve>(
                     // justification is valid, we mark it off from our matrix
                     statuses.set(bundle.dealer_idx, justification.share_idx, Status::Success);
                     if holder_idx == justification.share_idx {
-                        valid_shares.insert(bundle.dealer_idx, justification.share.clone());
+                        valid_shares.insert(
+                            bundle.dealer_idx,
+                            (justification.share.clone(), "".to_string()),
+                        );
                     }
                 })
         });

@@ -48,6 +48,8 @@ pub struct EncryptedShare<C: Curve> {
     pub share_idx: Idx,
     /// The ECIES encrypted share
     pub secret: EciesCipher<C>,
+
+    pub rpc_endpoint_secret: EciesCipher<C>,
 }
 
 /// A `BundledResponses` is sent during the second phase of the protocol by all

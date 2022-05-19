@@ -29,6 +29,7 @@ pub struct DKGInfo<C: Curve> {
     group: Group<C>,
     secret: Poly<C::Scalar>,
     public: Poly<C::Point>,
+    rpc_endpoint: String,
 }
 
 impl<C: Curve> DKGInfo<C> {
@@ -62,9 +63,13 @@ impl<C: Curve> DKG<C> {
     /// Creates a new DKG instance from the provided private key and group.
     ///
     /// The private key must be part of the group, otherwise this will return an error.
-    pub fn new(private_key: C::Scalar, group: Group<C>) -> Result<DKG<C>, DKGError> {
+    pub fn new(
+        private_key: C::Scalar,
+        rpc_endpoint: String,
+        group: Group<C>,
+    ) -> Result<DKG<C>, DKGError> {
         use rand::prelude::*;
-        Self::new_rand(private_key, group, &mut thread_rng())
+        Self::new_rand(private_key, rpc_endpoint, group, &mut thread_rng())
     }
 
     /// Creates a new DKG instance from the provided private key, group and RNG.
@@ -72,6 +77,7 @@ impl<C: Curve> DKG<C> {
     /// The private key must be part of the group, otherwise this will return an error.
     pub fn new_rand<R: RngCore>(
         private_key: C::Scalar,
+        rpc_endpoint: String,
         group: Group<C>,
         rng: &mut R,
     ) -> Result<DKG<C>, DKGError> {
@@ -95,6 +101,7 @@ impl<C: Curve> DKG<C> {
             group,
             secret,
             public,
+            rpc_endpoint,
         };
 
         Ok(DKG { info })
@@ -118,6 +125,7 @@ impl<C: Curve> Phase0<C> for DKG<C> {
             self.info.index,
             &self.info.secret,
             &self.info.public,
+            &self.info.rpc_endpoint,
             &self.info.group,
             rng(),
         )?;
@@ -151,7 +159,7 @@ impl<C: Curve> Phase1<C> for DKGWaitingShare<C> {
     /// - invalid length of public polynomial
     /// - invalid share w.r.t. public polynomial
     fn process_shares(
-        self,
+        mut self,
         bundles: &[BundledShares<C>],
         mut publish_all: bool,
     ) -> DKGResult<(DKGWaitingResponse<C>, Option<BundledResponses>)> {
@@ -179,10 +187,21 @@ impl<C: Curve> Phase1<C> for DKGWaitingShare<C> {
         let mut fshare = self.info.secret.eval(self.info.index).value;
         // The public key polynomial is the sum of all shared polynomials
         let mut fpub = self.info.public.clone();
-        shares.iter().for_each(|(&dealer_idx, share)| {
-            fpub.add(publics.get(&dealer_idx).unwrap());
-            fshare.add(share);
-        });
+        shares
+            .iter()
+            .for_each(|(&dealer_idx, (share, rpc_endpoint))| {
+                let node = self
+                    .info
+                    .group
+                    .nodes
+                    .iter_mut()
+                    .find(|node| node.id() == dealer_idx)
+                    .unwrap();
+                node.set_rpc_endpoint(rpc_endpoint.to_string());
+
+                fpub.add(publics.get(&dealer_idx).unwrap());
+                fshare.add(share);
+            });
         let bundle = compute_bundle_response(my_idx, &statuses, publish_all);
         let new_dkg = DKGWaitingResponse::new(self.info, fshare, fpub, statuses, publics);
 
@@ -318,7 +337,7 @@ where
             justifs,
         );
 
-        for (idx, share) in &valid_shares {
+        for (idx, (share, _)) in &valid_shares {
             add_share.add(share);
             // unwrap since internal_process_justi. gauarantees each share comes
             // from a public polynomial we've seen in the first round.
@@ -387,7 +406,7 @@ pub mod tests {
         let (privs, group) = setup_group::<C>(n, default_threshold(n));
         privs
             .into_iter()
-            .map(|p| DKG::new(p, group.clone()).unwrap())
+            .map(|p| DKG::new(p, String::from(""), group.clone()).unwrap())
             .collect::<Vec<_>>()
     }
 

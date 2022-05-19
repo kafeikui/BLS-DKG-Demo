@@ -1,4 +1,5 @@
 use thiserror::Error;
+use threshold_bls::sig::{BLSError, G1Scheme, ThresholdError};
 
 use crate::contract::errors::{ControllerError, CoordinatorError};
 use dkg_core::{primitives::DKGError, NodeError as DKGNodeError};
@@ -24,6 +25,12 @@ pub enum NodeError {
 
     #[error(transparent)]
     DKGError(#[from] DKGError),
+
+    #[error(transparent)]
+    BLSError(#[from] BLSError),
+
+    #[error(transparent)]
+    ThresholdError(#[from] ThresholdError<G1Scheme<threshold_bls::curve::bls12381::PairingCurve>>),
 
     #[error(transparent)]
     RpcClientError(#[from] tonic::transport::Error),
@@ -54,4 +61,10 @@ pub enum NodeError {
 
     #[error("the group is still waiting for other's DKGOutput to commit")]
     GroupWaitingForConsensus,
+
+    #[error("there is no signature cache yet")]
+    CommitterCacheNotExisted,
+
+    #[error("there is no task yet")]
+    NoTaskAvailable,
 }

@@ -1,6 +1,8 @@
+use std::collections::HashMap;
+
 use super::{
     errors::{NodeError, NodeResult},
-    types::{DKGTask, Group, Member},
+    types::{DKGTask, Group, Member, SignatureTask},
 };
 use dkg_core::primitives::DKGOutput;
 use threshold_bls::group::Element;
@@ -45,6 +47,10 @@ pub trait NodeInfoFetcher {
 
     fn get_id_address(&self) -> &str;
 
+    fn get_node_rpc_endpoint(&self) -> &str;
+
+    fn get_controller_rpc_endpoint(&self) -> &str;
+
     fn get_dkg_private_key(&self) -> NodeResult<&Scalar>;
 
     fn get_dkg_public_key(&self) -> NodeResult<&G1>;
@@ -53,15 +59,25 @@ pub trait NodeInfoFetcher {
 pub struct InMemoryNodeInfoCache {
     private_key: Vec<u8>,
     id_address: String,
+    node_rpc_endpoint: String,
+    controller_rpc_endpoint: String,
     dkg_private_key: Option<Scalar>,
     dkg_public_key: Option<G1>,
 }
 
 impl InMemoryNodeInfoCache {
-    pub fn new(id_address: String, dkg_private_key: Scalar, dkg_public_key: G1) -> Self {
+    pub fn new(
+        id_address: String,
+        node_rpc_endpoint: String,
+        controller_rpc_endpoint: String,
+        dkg_private_key: Scalar,
+        dkg_public_key: G1,
+    ) -> Self {
         InMemoryNodeInfoCache {
             private_key: vec![],
             id_address,
+            node_rpc_endpoint,
+            controller_rpc_endpoint,
             dkg_private_key: Some(dkg_private_key),
             dkg_public_key: Some(dkg_public_key),
         }
@@ -75,6 +91,14 @@ impl NodeInfoFetcher for InMemoryNodeInfoCache {
 
     fn get_id_address(&self) -> &str {
         &self.id_address
+    }
+
+    fn get_node_rpc_endpoint(&self) -> &str {
+        &self.node_rpc_endpoint
+    }
+
+    fn get_controller_rpc_endpoint(&self) -> &str {
+        &self.controller_rpc_endpoint
     }
 
     fn get_dkg_private_key(&self) -> NodeResult<&Scalar> {
@@ -125,6 +149,8 @@ pub trait GroupInfoFetcher {
     fn get_committers(&self) -> NodeResult<Vec<&str>>;
 
     fn get_dkg_start_block_height(&self) -> NodeResult<usize>;
+
+    fn is_committer(&self, id_address: &str) -> NodeResult<bool>;
 }
 
 #[derive(Default)]
@@ -183,6 +209,7 @@ impl GroupInfoUpdater for InMemoryGroupInfoCache {
             let member = Member {
                 index: *index,
                 id_address: address.to_string(),
+                rpc_endpint: None,
                 partial_public_key: None,
             };
             self.group.members.insert(address.to_string(), member);
@@ -213,12 +240,12 @@ impl GroupInfoUpdater for InMemoryGroupInfoCache {
 
         self.share = Some(output.share);
 
-        // member index in coordinator and DKGCore is started from 0 while in controller and node cache it is started from 1
+        // every member index is started from 0
         let qualified_node_indices = output
             .qual
             .nodes
             .iter()
-            .map(|node| (node.id() + 1) as usize)
+            .map(|node| node.id() as usize)
             .collect::<Vec<_>>();
 
         self.group.size = qualified_node_indices.len();
@@ -242,12 +269,23 @@ impl GroupInfoUpdater for InMemoryGroupInfoCache {
         let mut partial_public_key = G1::new();
 
         for (_, member) in self.group.members.iter_mut() {
+            if let Some(node) = output
+                .qual
+                .nodes
+                .iter()
+                .find(|node| member.index == node.id() as usize)
+            {
+                if let Some(rpc_endpoint) = node.get_rpc_endpoint() {
+                    member.rpc_endpint = Some(rpc_endpoint.to_string());
+                }
+            }
+
             member.partial_public_key = Some(output.public.eval(member.index as u32).value);
 
-            println!(
-                "member index: {}, partial_public_key: {:?}",
-                member.index, member.partial_public_key
-            );
+            // println!(
+            //     "member index: {}, partial_public_key: {:?}",
+            //     member.index, member.partial_public_key
+            // );
 
             if self.self_index == member.index {
                 partial_public_key = member.partial_public_key.unwrap();
@@ -355,5 +393,206 @@ impl GroupInfoFetcher for InMemoryGroupInfoCache {
         self.only_has_group_task()?;
 
         Ok(self.dkg_start_block_height)
+    }
+
+    fn is_committer(&self, id_address: &str) -> NodeResult<bool> {
+        self.only_has_group_task()?;
+
+        Ok(self.group.committers.contains(&id_address.to_string()))
+    }
+}
+
+pub trait BLSTasksFetcher {
+    fn contains(&self, task_index: usize) -> bool;
+
+    fn get(&self, task_index: usize) -> Option<&SignatureTask>;
+
+    fn is_handled(&self, task_index: usize) -> bool;
+}
+
+pub trait BLSTasksUpdater {
+    fn add(&mut self, task: SignatureTask) -> NodeResult<()>;
+
+    fn check_and_get_available_tasks(
+        &mut self,
+        current_block_height: usize,
+        current_group_index: usize,
+    ) -> Vec<SignatureTask>;
+}
+
+#[derive(Default)]
+pub struct InMemoryBLSTasksQueue {
+    bls_tasks: Vec<(SignatureTask, bool)>,
+}
+
+impl InMemoryBLSTasksQueue {
+    pub fn new() -> Self {
+        InMemoryBLSTasksQueue {
+            bls_tasks: Vec::new(),
+        }
+    }
+}
+
+impl BLSTasksFetcher for InMemoryBLSTasksQueue {
+    fn contains(&self, task_index: usize) -> bool {
+        self.bls_tasks
+            .iter()
+            .any(|(task, _)| task.index == task_index)
+    }
+
+    fn get(&self, task_index: usize) -> Option<&SignatureTask> {
+        self.bls_tasks.get(task_index).map(|(task, _)| task)
+    }
+
+    fn is_handled(&self, task_index: usize) -> bool {
+        *self
+            .bls_tasks
+            .get(task_index)
+            .map(|(_, state)| state)
+            .or(Some(&false))
+            .unwrap()
+    }
+}
+
+impl BLSTasksUpdater for InMemoryBLSTasksQueue {
+    fn add(&mut self, task: SignatureTask) -> NodeResult<()> {
+        self.bls_tasks.push((task, false));
+        Ok(())
+    }
+
+    fn check_and_get_available_tasks(
+        &mut self,
+        current_block_height: usize,
+        current_group_index: usize,
+    ) -> Vec<SignatureTask> {
+        let available_tasks = self
+            .bls_tasks
+            .iter_mut()
+            .filter(|(_, state)| !state)
+            .filter(|(bls_task, _)| {
+                bls_task.group_index == current_group_index
+                    || current_block_height > bls_task.assignment_block_height + 10
+            })
+            .map(|e| {
+                e.1 = true;
+                e.0.clone()
+            })
+            .collect::<Vec<_>>();
+
+        available_tasks
+    }
+}
+
+pub trait SignatureResultCacheFetcher {
+    fn contains(&self, signature_index: usize) -> bool;
+}
+
+pub trait SignatureResultCacheUpdater {
+    fn get_ready_to_commit_signatures(&mut self) -> Vec<SignatureResultCache>;
+
+    fn get(&mut self, signature_index: usize) -> NodeResult<&mut SignatureResultCache>;
+
+    fn add(
+        &mut self,
+        group_index: usize,
+        signature_index: usize,
+        threshold: usize,
+    ) -> NodeResult<bool>;
+
+    fn remove(&mut self, signature_index: usize) -> NodeResult<bool>;
+
+    fn add_partial_signature(
+        &mut self,
+        signature_index: usize,
+        member_address: String,
+        partial_signature: Vec<u8>,
+    ) -> NodeResult<bool>;
+}
+
+#[derive(Default)]
+pub struct InMemorySignatureResultCache {
+    signature_result_caches: HashMap<usize, SignatureResultCache>,
+}
+
+impl InMemorySignatureResultCache {
+    pub fn new() -> Self {
+        InMemorySignatureResultCache {
+            signature_result_caches: HashMap::new(),
+        }
+    }
+}
+
+#[derive(Clone)]
+pub struct SignatureResultCache {
+    pub group_index: usize,
+    pub signature_index: usize,
+    pub threshold: usize,
+    pub partial_signatures: HashMap<String, Vec<u8>>,
+}
+
+impl SignatureResultCacheFetcher for InMemorySignatureResultCache {
+    fn contains(&self, signature_index: usize) -> bool {
+        self.signature_result_caches.contains_key(&signature_index)
+    }
+}
+
+impl SignatureResultCacheUpdater for InMemorySignatureResultCache {
+    fn get(&mut self, signature_index: usize) -> NodeResult<&mut SignatureResultCache> {
+        let cache = self
+            .signature_result_caches
+            .get_mut(&signature_index)
+            .ok_or(NodeError::CommitterCacheNotExisted)?;
+        Ok(cache)
+    }
+
+    fn add(
+        &mut self,
+        group_index: usize,
+        signature_index: usize,
+        threshold: usize,
+    ) -> NodeResult<bool> {
+        let signature_result_cache = SignatureResultCache {
+            group_index,
+            signature_index,
+            threshold,
+            partial_signatures: HashMap::new(),
+        };
+
+        self.signature_result_caches
+            .insert(signature_index, signature_result_cache);
+
+        Ok(true)
+    }
+
+    fn remove(&mut self, signature_index: usize) -> NodeResult<bool> {
+        self.signature_result_caches.remove(&signature_index);
+
+        Ok(true)
+    }
+
+    fn add_partial_signature(
+        &mut self,
+        signature_index: usize,
+        member_address: String,
+        partial_signature: Vec<u8>,
+    ) -> NodeResult<bool> {
+        let signature_result_cache = self
+            .signature_result_caches
+            .get_mut(&signature_index)
+            .ok_or(NodeError::CommitterCacheNotExisted)?;
+
+        signature_result_cache
+            .partial_signatures
+            .insert(member_address, partial_signature);
+
+        Ok(true)
+    }
+
+    fn get_ready_to_commit_signatures(&mut self) -> Vec<SignatureResultCache> {
+        self.signature_result_caches
+            .values_mut()
+            .filter(|e| e.partial_signatures.len() >= e.threshold)
+            .map(|e| e.clone())
+            .collect::<Vec<_>>()
     }
 }

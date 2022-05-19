@@ -58,10 +58,11 @@ pub struct Controller {
     dkg_task: Option<DKGTask>,
     signature_task: Option<SignatureTask>,
     pub coordinators: HashMap<usize, (String, Coordinator)>,
+    controller_address: String,
 }
 
 impl Controller {
-    pub fn new(initial_entropy: u64) -> Self {
+    pub fn new(initial_entropy: u64, controller_address: String) -> Self {
         Controller {
             block_height: 100,
             epoch: 1,
@@ -76,6 +77,7 @@ impl Controller {
             dkg_task: None,
             signature_task: None,
             coordinators: HashMap::new(),
+            controller_address,
         }
     }
 }
@@ -252,9 +254,9 @@ pub trait Transactions {
 
     fn check_dkg_state(&mut self, id_address: &str, group_index: usize) -> ControllerResult<()>;
 
-    fn request(&mut self, message: &str) -> ControllerResult<()>;
+    fn request_randomness(&mut self, message: &str) -> ControllerResult<()>;
 
-    fn fulfill(
+    fn fulfill_randomness(
         &mut self,
         id_address: &str,
         group_index: usize,
@@ -356,17 +358,22 @@ impl Internal for Controller {
 
         group.committers = vec![];
 
+        let group = self.groups.get(&group_index).unwrap();
+
         // create coordinator instance
         let mut coordinator =
             Coordinator::new(group.epoch, group.threshold, DEFAULT_DKG_PHASE_DURATION);
 
-        let mut members = HashMap::new();
+        let mut members = group
+            .members
+            .values()
+            .map(|m| {
+                let public_key = self.nodes.get(&m.id_address).unwrap().id_public_key.clone();
+                (m.id_address.clone(), m.index, public_key)
+            })
+            .collect::<Vec<_>>();
 
-        for address in group.members.keys() {
-            let public_key = self.nodes.get(address).unwrap().id_public_key.clone();
-
-            members.insert(address.to_string(), public_key);
-        }
+        members.sort_by(|a, b| a.1.cmp(&b.1));
 
         coordinator.start(self.block_height, members)?;
 
@@ -389,7 +396,7 @@ impl Internal for Controller {
             threshold: group.threshold,
             members,
             assignment_block_height: self.block_height,
-            coordinator_address: format!("0xcoordinator{}", group.index),
+            coordinator_address: self.controller_address.clone(),
         };
 
         self.dkg_task = Some(dkg_task);
@@ -506,13 +513,13 @@ impl Internal for Controller {
     ) -> ControllerResult<()> {
         let group = self.groups.get_mut(&group_index).unwrap();
 
-        group.size += 1;
-
         let member = Member {
             index: group.size,
             id_address: node_id_address.clone(),
             partial_public_key: vec![],
         };
+
+        group.size += 1;
 
         group.members.insert(node_id_address, member);
 
@@ -674,7 +681,7 @@ impl MockHelper for Controller {
             .values_mut()
             .for_each(|(_, c)| c.mine(block_number));
 
-        println!("controller block_height: {}", self.block_height);
+        // println!("controller block_height: {}", self.block_height);
 
         Ok(self.block_height)
     }
@@ -984,10 +991,13 @@ impl Transactions for Controller {
         Ok(())
     }
 
-    fn request(&mut self, message: &str) -> ControllerResult<()> {
+    fn request_randomness(&mut self, message: &str) -> ControllerResult<()> {
         let valid_group_indices = self.valid_group_indices();
 
+        println!("request randomness successfully");
+
         if valid_group_indices.is_empty() {
+            println!("no available group!");
             return Err(ControllerError::NoVaildGroup);
         }
         // mock: payment for request
@@ -1002,14 +1012,14 @@ impl Transactions for Controller {
             }
         }
 
-        self.signature_count += 1;
-
         let signature_task = SignatureTask {
             index: self.signature_count,
-            message: String::from(message),
+            message: format!("{}{}{}", message, &self.block_height, &self.last_output),
             group_index: assignment_group_index,
             assignment_block_height: self.block_height,
         };
+
+        self.signature_count += 1;
 
         self.signature_task = Some(signature_task.clone());
         // self.emit_signature_task(signature_task.clone());
@@ -1022,7 +1032,7 @@ impl Transactions for Controller {
         Ok(())
     }
 
-    fn fulfill(
+    fn fulfill_randomness(
         &mut self,
         id_address: &str,
         group_index: usize,
@@ -1207,7 +1217,7 @@ impl Views for Controller {
     }
 
     fn get_signature_task_completion_state(&self, index: usize) -> bool {
-        !self.pending_signature_tasks.contains_key(&index)
+        index < self.signature_count && !self.pending_signature_tasks.contains_key(&index)
     }
 
     fn valid_group_indices(&self) -> Vec<usize> {
@@ -1269,7 +1279,7 @@ pub mod tests {
     fn test() {
         let initial_entropy = 0x8762_4875_6548_6346;
 
-        let mut controller = Controller::new(initial_entropy);
+        let mut controller = Controller::new(initial_entropy, "0xcontroller_address".to_string());
 
         let node_address = "0x1";
 
@@ -1285,5 +1295,14 @@ pub mod tests {
         let vec1 = vec![String::from("232wer3")];
         let vec2 = vec![String::from("232wer3")];
         println!("{}", vec1 == vec2);
+    }
+
+    #[test]
+    fn test3() {
+        let str = String::from("ewrfw");
+        let vec = bincode::serialize(&str).unwrap();
+        let asda: String = bincode::deserialize(&vec).unwrap();
+        println!("{}", asda);
+        println!("{}", str == asda);
     }
 }

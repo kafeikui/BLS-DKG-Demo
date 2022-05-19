@@ -46,7 +46,7 @@ pub trait Transactions {
     fn start(
         &mut self,
         block_height: usize,
-        members: HashMap<String, Vec<u8>>,
+        members: Vec<(String, usize, Vec<u8>)>,
     ) -> CoordinatorResult<()>;
 
     /// Participant publishes their data and depending on the phase the data gets inserted
@@ -120,7 +120,7 @@ impl Transactions for Coordinator {
     fn start(
         &mut self,
         block_height: usize,
-        members: HashMap<String, Vec<u8>>,
+        members: Vec<(String, usize, Vec<u8>)>,
     ) -> CoordinatorResult<()> {
         self.only_when_not_started()?;
 
@@ -128,7 +128,7 @@ impl Transactions for Coordinator {
 
         self.block_height = block_height;
 
-        members.into_iter().for_each(|(address, key)| {
+        members.into_iter().for_each(|(address, _, key)| {
             self.participants.push(address.clone());
 
             self.keys.insert(address, key);
@@ -188,7 +188,11 @@ impl Views for Coordinator {
     }
 
     fn get_bls_keys(&self) -> CoordinatorResult<(usize, Vec<Vec<u8>>)> {
-        let keys = self.keys.values().cloned().collect::<Vec<_>>();
+        let keys = self
+            .participants
+            .iter()
+            .map(|p| self.keys.get(p).unwrap().clone())
+            .collect::<Vec<_>>();
 
         Ok((self.threshold, keys))
     }

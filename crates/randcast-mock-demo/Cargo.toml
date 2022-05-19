@@ -10,7 +10,11 @@ path = "src/contract/server.rs"
 
 [[bin]]
 name = "node-client"
-path = "src/client.rs"
+path = "src/node_client.rs"
+
+[[bin]]
+name = "user-client"
+path = "src/user_client.rs"
 
 [dependencies]
 dkg-core = { path = "../dkg-core" }

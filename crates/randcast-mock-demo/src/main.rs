@@ -20,12 +20,14 @@ use threshold_bls::{
 async fn main() -> NodeResult<()> {
     let initial_entropy = 0x8762_4875_6548_6346;
 
+    let controller_address = String::from("test_controller");
+
     println!(
         "controller is deploying... initial entropy: {}",
         initial_entropy
     );
 
-    let mut controller = Controller::new(initial_entropy);
+    let mut controller = Controller::new(initial_entropy, controller_address);
 
     let (t, n) = (3, 5);
 
@@ -98,7 +100,7 @@ async fn main() -> NodeResult<()> {
 
     println!("An user is requesting a randomness... msg seed: {}", msg);
 
-    let request_res = controller.request(&msg);
+    let request_res = controller.request_randomness(&msg);
 
     println!("request_res: {:?}", request_res);
 
@@ -154,7 +156,7 @@ async fn main() -> NodeResult<()> {
         println!(
             "{}-res: {:?}",
             i,
-            controller.fulfill(
+            controller.fulfill_randomness(
                 &format!("0x{}", i),
                 1,
                 signature_index,
@@ -253,7 +255,9 @@ where
     // Create the Phase 0 for each participant
     let phase0s = keypairs
         .iter()
-        .map(|(private, _)| joint_feldman::DKG::new(private.clone(), group.clone()).unwrap())
+        .map(|(private, _)| {
+            joint_feldman::DKG::new(private.clone(), String::from(""), group.clone()).unwrap()
+        })
         .collect::<Vec<_>>();
 
     // Create the board

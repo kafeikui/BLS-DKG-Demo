@@ -563,6 +563,7 @@ impl BLSTaskListener for MockBLSTaskListener {
                     break;
                 }
                 i += 1;
+                tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
             }
         }
 

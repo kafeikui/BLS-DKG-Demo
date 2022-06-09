@@ -5,7 +5,12 @@ use dkg_core::primitives::{
 };
 use dkg_core::{DKGPhase, Phase2Result};
 use randcast_mock_demo::{
-    contract::controller::*, node::errors::NodeResult, test_helpers::InMemoryBoard,
+    contract::{
+        adapter::{Adapter, AdapterMockHelper, AdapterTransactions, AdapterViews},
+        controller::*,
+    },
+    node::errors::NodeResult,
+    test_helpers::InMemoryBoard,
 };
 use std::collections::HashMap;
 use threshold_bls::{
@@ -27,7 +32,9 @@ async fn main() -> NodeResult<()> {
         initial_entropy
     );
 
-    let mut controller = Controller::new(initial_entropy, controller_address);
+    let adpater = Adapter::new(initial_entropy, controller_address);
+
+    let mut controller = Controller::new(adpater);
 
     let (t, n) = (3, 5);
 
@@ -88,7 +95,7 @@ async fn main() -> NodeResult<()> {
         println!("{}-res: {:?}", i, res);
     });
 
-    let group = controller.get_group(1);
+    let group = controller.get_group(1).unwrap();
 
     println!("group state: {}", group.state);
 
@@ -109,6 +116,8 @@ async fn main() -> NodeResult<()> {
     let signature_task = controller.emit_signature_task()?;
 
     let signature_index = signature_task.index;
+
+    let msg = signature_task.message;
 
     // generates a partial sig with each share from the dkg
     let partial_sigs = outputs

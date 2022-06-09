@@ -1,16 +1,13 @@
-use crate::node::cache::{BLSTasksFetcher, BLSTasksUpdater, SignatureResultCacheFetcher};
-use crate::node::committer_server;
-
 use super::cache::{
     BlockInfoFetcher, BlockInfoUpdater, GroupInfoFetcher, GroupInfoUpdater, InMemoryBLSTasksQueue,
     InMemorySignatureResultCache, SignatureResultCache, SignatureResultCacheUpdater,
 };
-use super::client::{
-    CommitterService, ControllerMockHelper, ControllerTransactions, ControllerViews,
-    MockCommitterClient, MockControllerClient, MockCoordinatorClient,
+use super::controller_client::{
+    ControllerMockHelper, ControllerTransactions, ControllerViews, MockControllerClient,
+    MockCoordinatorClient,
 };
 use super::errors::{NodeError, NodeResult};
-use super::types::{Group, SignatureTask};
+use super::types::{Group, SignatureTask, TaskType};
 use super::{
     bls::{BLSCore, MockBLSCore},
     cache::{
@@ -19,6 +16,9 @@ use super::{
     dkg::{DKGCore, MockDKGCore},
     types::DKGTask,
 };
+use crate::node::cache::{BLSTasksFetcher, BLSTasksUpdater, SignatureResultCacheFetcher};
+use crate::node::committer_client::{CommitterService, MockCommitterClient};
+use crate::node::committer_server;
 use async_trait::async_trait;
 use parking_lot::RwLock;
 use rand::RngCore;
@@ -26,7 +26,7 @@ use std::io::{self, Write};
 use std::sync::Arc;
 use tokio::task::JoinHandle;
 
-pub const DEFAULT_DKG_TIMEOUT_DURATION: usize = 30 * 3;
+pub const DEFAULT_DKG_TIMEOUT_DURATION: usize = 10 * 4;
 
 #[async_trait]
 pub trait StartingGroupingListener<F, R> {
@@ -43,7 +43,7 @@ pub struct MockStartingGroupingListener<F: Fn() -> R, R: RngCore> {
     block_cache: Arc<RwLock<InMemoryBlockInfoCache>>,
     node_cache: Arc<RwLock<InMemoryNodeInfoCache>>,
     group_cache: Arc<RwLock<InMemoryGroupInfoCache>>,
-    bls_tasks_cache: Arc<RwLock<InMemoryBLSTasksQueue>>,
+    bls_tasks_cache: Arc<RwLock<InMemoryBLSTasksQueue<SignatureTask>>>,
     committer_cache: Arc<RwLock<InMemorySignatureResultCache>>,
 }
 
@@ -53,7 +53,7 @@ impl<F: Fn() -> R, R: RngCore> MockStartingGroupingListener<F, R> {
         block_cache: Arc<RwLock<InMemoryBlockInfoCache>>,
         node_cache: Arc<RwLock<InMemoryNodeInfoCache>>,
         group_cache: Arc<RwLock<InMemoryGroupInfoCache>>,
-        bls_tasks_cache: Arc<RwLock<InMemoryBLSTasksQueue>>,
+        bls_tasks_cache: Arc<RwLock<InMemoryBLSTasksQueue<SignatureTask>>>,
         committer_cache: Arc<RwLock<InMemorySignatureResultCache>>,
     ) -> Self {
         MockStartingGroupingListener {
@@ -246,7 +246,7 @@ pub struct MockEndGroupingListener {
     node_rpc_endpoint: String,
     block_cache: Arc<RwLock<InMemoryBlockInfoCache>>,
     group_cache: Arc<RwLock<InMemoryGroupInfoCache>>,
-    bls_tasks_cache: Arc<RwLock<InMemoryBLSTasksQueue>>,
+    bls_tasks_cache: Arc<RwLock<InMemoryBLSTasksQueue<SignatureTask>>>,
     committer_cache: Arc<RwLock<InMemorySignatureResultCache>>,
 }
 
@@ -257,7 +257,7 @@ impl MockEndGroupingListener {
         node_rpc_endpoint: String,
         block_cache: Arc<RwLock<InMemoryBlockInfoCache>>,
         group_cache: Arc<RwLock<InMemoryGroupInfoCache>>,
-        bls_tasks_cache: Arc<RwLock<InMemoryBLSTasksQueue>>,
+        bls_tasks_cache: Arc<RwLock<InMemoryBLSTasksQueue<SignatureTask>>>,
         committer_cache: Arc<RwLock<InMemorySignatureResultCache>>,
     ) -> Self {
         MockEndGroupingListener {
@@ -281,142 +281,135 @@ impl EndGroupingListener for MockEndGroupingListener {
 
         let group_index = self.group_cache.read().get_index()?;
 
-        loop {
+        let is_post_dkg_handle_success = false;
+
+        let mut block_height = self.block_cache.read().get_block_height();
+
+        while block_height <= timeout_block_height {
             let group = client.get_group(group_index).await?;
 
-            match self.handle(group) {
-                Ok(()) => {
-                    println!("DKG task execute successfully!");
+            if let Ok(()) = self.handle(group) {
+                println!("DKG task execute successfully!");
 
-                    let mut listener_tasks: Vec<JoinHandle<()>> = Vec::new();
+                let mut listener_tasks: Vec<JoinHandle<()>> = Vec::new();
 
-                    if self.group_cache.read().is_committer(&self.id_address)? {
-                        let id_address = self.id_address.clone();
-
-                        let controller_address = self.controller_address.clone();
-
-                        let committer_cache = self.committer_cache.clone();
-
-                        let signature_aggregation_listener_task = tokio::spawn(async move {
-                            let signature_aggregation_listener =
-                                MockSignatureAggregationListener::new(
-                                    id_address,
-                                    controller_address,
-                                    committer_cache,
-                                );
-                            if let Err(e) = signature_aggregation_listener.start().await {
-                                println!("{:?}", e);
-                            }
-                        });
-
-                        listener_tasks.push(signature_aggregation_listener_task);
-
-                        let group_cache = self.group_cache.clone();
-                        let endpoint = self.node_rpc_endpoint.clone();
-                        let group_cache_for_committer_server = self.group_cache.clone();
-                        let committer_cache_for_committer_server = self.committer_cache.clone();
-                        tokio::spawn(async move {
-                            if let Err(e) = committer_server::start_committer_server(
-                                endpoint,
-                                group_cache_for_committer_server,
-                                committer_cache_for_committer_server,
-                                async {
-                                    loop {
-                                        match group_cache.clone().read().get_state() {
-                                            Err(_) => {
-                                                break;
-                                            }
-                                            Ok(false) => {
-                                                break;
-                                            }
-                                            _ => {}
-                                        }
-                                        tokio::time::sleep(std::time::Duration::from_millis(2000))
-                                            .await;
-                                    }
-                                },
-                            )
-                            .await
-                            {
-                                println!("{:?}", e);
-                            };
-                        });
-                    }
-
+                if self.group_cache.read().is_committer(&self.id_address)? {
                     let id_address = self.id_address.clone();
 
                     let controller_address = self.controller_address.clone();
 
-                    let block_cache = self.block_cache.clone();
-
-                    let group_cache = self.group_cache.clone();
-
-                    let bls_tasks_cache = self.bls_tasks_cache.clone();
-
                     let committer_cache = self.committer_cache.clone();
 
-                    let bls_task_listener_task = tokio::spawn(async move {
-                        let mut bls_task_listener = MockBLSTaskListener::new(
+                    let signature_aggregation_listener_task = tokio::spawn(async move {
+                        let signature_aggregation_listener = MockSignatureAggregationListener::new(
                             id_address,
                             controller_address,
-                            block_cache,
-                            group_cache,
-                            bls_tasks_cache,
                             committer_cache,
                         );
-                        if let Err(e) = bls_task_listener.init().await {
-                            println!("{:?}", e);
-                        }
-                        if let Err(e) = bls_task_listener.start().await {
+                        if let Err(e) = signature_aggregation_listener.start().await {
                             println!("{:?}", e);
                         }
                     });
 
-                    listener_tasks.push(bls_task_listener_task);
+                    listener_tasks.push(signature_aggregation_listener_task);
 
                     let group_cache = self.group_cache.clone();
+                    let endpoint = self.node_rpc_endpoint.clone();
+                    let group_cache_for_committer_server = self.group_cache.clone();
+                    let committer_cache_for_committer_server = self.committer_cache.clone();
                     tokio::spawn(async move {
-                        loop {
-                            match group_cache.clone().read().get_state() {
-                                Err(_) => {
-                                    for task in listener_tasks {
-                                        task.abort();
+                        if let Err(e) = committer_server::start_committer_server(
+                            endpoint,
+                            group_cache_for_committer_server,
+                            committer_cache_for_committer_server,
+                            async {
+                                loop {
+                                    match group_cache.clone().read().get_state() {
+                                        Err(_) => {
+                                            break;
+                                        }
+                                        Ok(false) => {
+                                            break;
+                                        }
+                                        _ => {}
                                     }
-                                    break;
+                                    tokio::time::sleep(std::time::Duration::from_millis(2000))
+                                        .await;
                                 }
-                                Ok(false) => {
-                                    for task in listener_tasks {
-                                        task.abort();
-                                    }
-                                    break;
-                                }
-                                _ => {}
-                            }
-                        }
+                            },
+                        )
+                        .await
+                        {
+                            println!("{:?}", e);
+                        };
                     });
-
-                    return Ok(());
                 }
 
-                Err(NodeError::GroupWaitingForConsensus) => {
-                    let block_height = self.block_cache.read().get_block_height();
+                let id_address = self.id_address.clone();
 
-                    if block_height > timeout_block_height {
-                        client.check_dkg_state(group_index).await?;
+                let controller_address = self.controller_address.clone();
 
-                        println!(
-                            "DKG task timeout in committing output phase. Wait for next task..."
-                        );
+                let block_cache = self.block_cache.clone();
 
-                        return Ok(());
+                let group_cache = self.group_cache.clone();
+
+                let bls_tasks_cache = self.bls_tasks_cache.clone();
+
+                let committer_cache = self.committer_cache.clone();
+
+                let bls_task_listener_task = tokio::spawn(async move {
+                    let mut bls_task_listener = MockBLSTaskListener::new(
+                        id_address,
+                        controller_address,
+                        block_cache,
+                        group_cache,
+                        bls_tasks_cache,
+                        committer_cache,
+                    );
+                    if let Err(e) = bls_task_listener.init().await {
+                        println!("{:?}", e);
                     }
-                }
+                    if let Err(e) = bls_task_listener.start().await {
+                        println!("{:?}", e);
+                    }
+                });
 
-                Err(e) => return Err(e),
+                listener_tasks.push(bls_task_listener_task);
+
+                let group_cache = self.group_cache.clone();
+                tokio::spawn(async move {
+                    loop {
+                        match group_cache.clone().read().get_state() {
+                            Err(_) => {
+                                for task in listener_tasks {
+                                    task.abort();
+                                }
+                                break;
+                            }
+                            Ok(false) => {
+                                for task in listener_tasks {
+                                    task.abort();
+                                }
+                                break;
+                            }
+                            _ => {}
+                        }
+                    }
+                });
             }
+
+            block_height = self.block_cache.read().get_block_height();
 
             tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
         }
+
+        client.check_dkg_state(group_index).await?;
+
+        if !is_post_dkg_handle_success {
+            println!("DKG task timeout in committing output phase. Wait for next task...");
+        }
+
+        return Ok(());
     }
 
     fn handle(&self, group: Group) -> NodeResult<()> {
@@ -493,10 +486,10 @@ pub trait BLSTaskListener {
 
 pub struct MockBLSTaskListener {
     id_address: String,
-    controller_address: String,
+    adapter_address: String,
     block_cache: Arc<RwLock<InMemoryBlockInfoCache>>,
     group_cache: Arc<RwLock<InMemoryGroupInfoCache>>,
-    bls_tasks_cache: Arc<RwLock<InMemoryBLSTasksQueue>>,
+    bls_tasks_cache: Arc<RwLock<InMemoryBLSTasksQueue<SignatureTask>>>,
     committer_cache: Arc<RwLock<InMemorySignatureResultCache>>,
     committer_clients: Vec<MockCommitterClient>,
 }
@@ -504,15 +497,15 @@ pub struct MockBLSTaskListener {
 impl MockBLSTaskListener {
     pub fn new(
         id_address: String,
-        controller_address: String,
+        adapter_address: String,
         block_cache: Arc<RwLock<InMemoryBlockInfoCache>>,
         group_cache: Arc<RwLock<InMemoryGroupInfoCache>>,
-        bls_tasks_cache: Arc<RwLock<InMemoryBLSTasksQueue>>,
+        bls_tasks_cache: Arc<RwLock<InMemoryBLSTasksQueue<SignatureTask>>>,
         committer_cache: Arc<RwLock<InMemorySignatureResultCache>>,
     ) -> Self {
         MockBLSTaskListener {
             id_address,
-            controller_address,
+            adapter_address,
             block_cache,
             group_cache,
             bls_tasks_cache,
@@ -572,7 +565,7 @@ impl BLSTaskListener for MockBLSTaskListener {
 
     async fn start(mut self) -> NodeResult<()> {
         let mut client =
-            MockControllerClient::new(self.controller_address.clone(), self.id_address.clone())
+            MockControllerClient::new(self.adapter_address.clone(), self.id_address.clone())
                 .await?;
 
         loop {
@@ -638,7 +631,12 @@ impl BLSTaskListener for MockBLSTaskListener {
 
                         for committer in self.committer_clients.iter_mut() {
                             committer
-                                .commit_partial_signature(task_index, partial_signature.clone())
+                                .commit_partial_signature(
+                                    TaskType::Randomness,
+                                    task.message.as_bytes().to_vec(),
+                                    task_index,
+                                    partial_signature.clone(),
+                                )
                                 .await?;
                         }
                     }

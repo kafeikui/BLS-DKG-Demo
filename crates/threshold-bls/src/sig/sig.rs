@@ -63,6 +63,12 @@ pub trait SignatureScheme: Scheme {
 
     /// Verifies that the signature on the provided message was produced by the public key
     fn verify(public: &Self::Public, msg: &[u8], sig: &[u8]) -> Result<(), Self::Error>;
+
+    fn aggregation_verify_on_the_same_msg(
+        partial_publics: &[Self::Public],
+        msg: &[u8],
+        sig_bytes: &[Self::Signature],
+    ) -> Result<(), Self::Error>;
 }
 
 /// BlindScheme is a signature scheme where the message can be blinded before

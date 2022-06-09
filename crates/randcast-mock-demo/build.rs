@@ -1,5 +1,6 @@
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let protos = &[
+        "proto/adapter.proto",
         "proto/controller.proto",
         "proto/coordinator.proto",
         "proto/committer.proto",

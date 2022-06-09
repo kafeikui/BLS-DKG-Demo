@@ -96,7 +96,7 @@ where
     where
         C: 'async_trait,
     {
-        let (next, bundle) = self.process_shares(shares, false)?;
+        let (next, bundle) = self.process_shares(shares, true)?;
 
         if let Some(bundle) = bundle {
             board

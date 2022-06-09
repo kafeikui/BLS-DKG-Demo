@@ -47,6 +47,9 @@ pub enum NodeError {
     #[error("the group is not exist")]
     GroupNotExisted,
 
+    #[error("you are not contained in the group")]
+    MemberNotExisted,
+
     #[error("there is not an available DKG output")]
     GroupNotReady,
 

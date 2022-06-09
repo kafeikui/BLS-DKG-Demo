@@ -6,7 +6,11 @@ edition = "2018"
 
 [[bin]]
 name = "controller-server"
-path = "src/contract/server.rs"
+path = "src/contract/controller_server.rs"
+
+[[bin]]
+name = "adapter_server"
+path = "src/contract/adapter_server.rs"
 
 [[bin]]
 name = "node-client"
@@ -40,6 +44,7 @@ clt = "0.0.6"
 tonic = "0.6"
 prost = "0.9"
 parking_lot = "0.12.0"
+serde_yaml = "0.8"
 
 [build-dependencies]
 tonic-build = "0.6"

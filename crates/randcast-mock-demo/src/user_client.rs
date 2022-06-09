@@ -1,5 +1,5 @@
-use randcast_mock_demo::node::client::MockControllerClient;
-use randcast_mock_demo::node::client::{ControllerTransactions, ControllerViews};
+use randcast_mock_demo::node::controller_client::MockControllerClient;
+use randcast_mock_demo::node::controller_client::{ControllerTransactions, ControllerViews};
 use std::env;
 
 #[tokio::main]
@@ -20,13 +20,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let instruction = match args.next() {
         Some(arg) => arg,
-        None => panic!("Didn't get in instruction string"),
+        None => panic!("Didn't get an instruction string"),
     };
 
     let mut client = MockControllerClient::new(controller_rpc_endpoint, id_address).await?;
 
     if instruction == "request" {
-        client.request_randomness("asdasdas").await?;
+        let seed = match args.next() {
+            Some(arg) => arg,
+            None => panic!("Didn't get a seed string"),
+        };
+        client.request_randomness(&seed).await?;
 
         println!("request randomness successfully");
     } else if instruction == "last_output" {

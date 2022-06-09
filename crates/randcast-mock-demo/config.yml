@@ -1,0 +1,4 @@
+controller_endpoint: "[::1]:50052"
+adapters:
+  - name: eth
+    endpoint: "[::1]:50053"

@@ -2,10 +2,24 @@
 pub struct CommitPartialSignatureRequest {
     #[prost(string, tag = "1")]
     pub id_address: ::prost::alloc::string::String,
-    #[prost(uint32, tag = "2")]
+    #[prost(enumeration = "commit_partial_signature_request::TaskType", tag = "2")]
+    pub task_type: i32,
+    #[prost(uint32, tag = "3")]
     pub signature_index: u32,
-    #[prost(bytes = "vec", tag = "3")]
+    #[prost(bytes = "vec", tag = "4")]
+    pub message: ::prost::alloc::vec::Vec<u8>,
+    #[prost(bytes = "vec", tag = "5")]
     pub partial_signature: ::prost::alloc::vec::Vec<u8>,
+}
+/// Nested message and enum types in `CommitPartialSignatureRequest`.
+pub mod commit_partial_signature_request {
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+    #[repr(i32)]
+    pub enum TaskType {
+        Randomness = 0,
+        GroupRelay = 1,
+        GroupRelayConfirmation = 2,
+    }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CommitPartialSignatureReply {

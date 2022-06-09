@@ -1,17 +1,19 @@
-use futures::Future;
-use parking_lot::RwLock;
-use std::sync::Arc;
-use tonic::{transport::Server, Request, Response, Status};
-
 use self::committer::{
     committer_service_server::{CommitterService, CommitterServiceServer},
     CommitPartialSignatureReply, CommitPartialSignatureRequest,
 };
-
-use super::cache::{
-    GroupInfoFetcher, InMemoryGroupInfoCache, InMemorySignatureResultCache,
-    SignatureResultCacheFetcher, SignatureResultCacheUpdater,
+use super::{
+    bls::{BLSCore, MockBLSCore},
+    cache::{
+        GroupInfoFetcher, InMemoryGroupInfoCache, InMemorySignatureResultCache,
+        SignatureResultCacheFetcher, SignatureResultCacheUpdater,
+    },
+    errors::NodeError,
 };
+use futures::Future;
+use parking_lot::RwLock;
+use std::sync::Arc;
+use tonic::{transport::Server, Request, Response, Status};
 
 pub mod committer {
     include!("../../stub/committer.rs");
@@ -42,39 +44,55 @@ impl CommitterService for BLSCommitterServiceServer {
     ) -> Result<Response<CommitPartialSignatureReply>, Status> {
         let req = request.into_inner();
 
-        if !self
-            .committer_cache
-            .read()
-            .contains(req.signature_index as usize)
-        {
-            let group_index = self
-                .group_cache
-                .read()
-                .get_index()
+        if let Ok(member) = self.group_cache.read().get_member(&req.id_address) {
+            if !self.group_cache.read().get_state().unwrap() {
+                return Err(Status::not_found(NodeError::GroupNotReady.to_string()));
+            }
+
+            let partial_public_key = member.partial_public_key.unwrap();
+
+            let bls_core = MockBLSCore {};
+
+            bls_core
+                .partial_verify(&partial_public_key, &req.message, &req.partial_signature)
                 .map_err(|e| Status::internal(e.to_string()))?;
 
-            let threshold = self
-                .group_cache
+            if !self
+                .committer_cache
                 .read()
-                .get_threshold()
-                .map_err(|e| Status::internal(e.to_string()))?;
+                .contains(req.signature_index as usize)
+            {
+                let group_index = self
+                    .group_cache
+                    .read()
+                    .get_index()
+                    .map_err(|e| Status::internal(e.to_string()))?;
+
+                let threshold = self
+                    .group_cache
+                    .read()
+                    .get_threshold()
+                    .map_err(|e| Status::internal(e.to_string()))?;
+
+                self.committer_cache
+                    .write()
+                    .add(group_index, req.signature_index as usize, threshold)
+                    .map_err(|e| Status::internal(e.to_string()))?;
+            }
 
             self.committer_cache
                 .write()
-                .add(group_index, req.signature_index as usize, threshold)
-                .map_err(|e| Status::internal(e.to_string()))?;
+                .add_partial_signature(
+                    req.signature_index as usize,
+                    req.id_address,
+                    req.partial_signature,
+                )
+                .unwrap();
+
+            return Ok(Response::new(CommitPartialSignatureReply { result: true }));
         }
 
-        self.committer_cache
-            .write()
-            .add_partial_signature(
-                req.signature_index as usize,
-                req.id_address,
-                req.partial_signature,
-            )
-            .unwrap();
-
-        Ok(Response::new(CommitPartialSignatureReply { result: true }))
+        Err(Status::not_found(NodeError::MemberNotExisted.to_string()))
     }
 }
 

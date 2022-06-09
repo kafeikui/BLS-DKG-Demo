@@ -1,10 +1,10 @@
 use super::{
     cache::GroupInfoFetcher,
-    client::CoordinatorViews,
+    controller_client::CoordinatorViews,
     errors::{NodeError, NodeResult},
     types::DKGTask,
 };
-use crate::node::client::MockCoordinatorClient;
+use crate::node::controller_client::MockCoordinatorClient;
 use async_trait::async_trait;
 use dkg_core::{
     primitives::{joint_feldman::*, *},
@@ -58,13 +58,8 @@ where
     where
         F: Send + 'async_trait,
     {
-        // 1. Generate the keys
-        // let (private_key, public_key) = S::keypair(rng);
-
-        // 2. no need to register, just wait for phase1 for now
-
-        // Wait for Phase 1
-        wait_for_phase(&mut coordinator_client, 1).await?;
+        // Wait for Phase 0
+        wait_for_phase(&mut coordinator_client, 0).await?;
         check_epoch_valid(&task, group_info_fetcher.clone())?;
 
         // Get the group info
@@ -113,8 +108,8 @@ where
         // Run Phase 1 and publish to the chain
         let phase1 = phase0.run(&mut coordinator_client, rng).await?;
 
-        // Wait for Phase 2
-        wait_for_phase(&mut coordinator_client, 2).await?;
+        // Wait for Phase 1
+        wait_for_phase(&mut coordinator_client, 1).await?;
         check_epoch_valid(&task, group_info_fetcher.clone())?;
 
         // Get the shares
@@ -124,6 +119,10 @@ where
         println!("Parsed {} shares. Running Phase 2", shares.len());
 
         let phase2 = phase1.run(&mut coordinator_client, &shares).await?;
+
+        // Wait for Phase 2
+        wait_for_phase(&mut coordinator_client, 2).await?;
+        check_epoch_valid(&task, group_info_fetcher.clone())?;
 
         // Get the responses
         let responses = coordinator_client.get_responses().await?;
@@ -137,6 +136,7 @@ where
             // Run Phase 3 if Phase 2 errored
             Phase2Result::GoToPhase3(phase3) => {
                 println!("There were complaints. Running Phase 3.");
+                // Wait for Phase 3
                 wait_for_phase(&mut coordinator_client, 3).await?;
                 check_epoch_valid(&task, group_info_fetcher.clone())?;
 

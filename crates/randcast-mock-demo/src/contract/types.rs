@@ -1,32 +1,63 @@
 use std::collections::HashMap;
+use std::hash::{Hash, Hasher};
 
 use serde::{Deserialize, Serialize};
-use threshold_bls::curve::bls12381::G1;
 
-pub trait Task {
-    fn index(&self) -> usize;
-}
-
-pub struct BLSTask<T> {
-    pub task: T,
+pub struct Node {
+    pub id_address: String,
+    pub id_public_key: Vec<u8>,
     pub state: bool,
+    pub pending_until_block: usize,
+    pub staking: usize,
 }
 
-impl Task for SignatureTask {
-    fn index(&self) -> usize {
-        self.index
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
+pub struct Group {
+    pub index: usize,
+    pub epoch: usize,
+    pub capacity: usize,
+    pub size: usize,
+    pub threshold: usize,
+    pub state: bool,
+    pub public_key: Vec<u8>,
+    pub members: HashMap<String, Member>,
+    pub committers: Vec<String>,
+    pub commit_cache: HashMap<String, CommitCache>,
+}
+
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
+pub struct Member {
+    pub index: usize,
+    pub id_address: String,
+    pub partial_public_key: Vec<u8>,
+}
+
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
+pub struct CommitCache {
+    pub(crate) commit_result: CommitResult,
+    pub(crate) partial_public_key: Vec<u8>,
+}
+
+#[derive(Eq, Clone, Serialize, Deserialize)]
+pub struct CommitResult {
+    pub(crate) group_epoch: usize,
+    pub(crate) public_key: Vec<u8>,
+    pub(crate) disqualified_nodes: Vec<String>,
+}
+
+impl PartialEq for CommitResult {
+    fn eq(&self, other: &Self) -> bool {
+        self.group_epoch == other.group_epoch
+            && self.public_key == other.public_key
+            && self.disqualified_nodes == other.disqualified_nodes
     }
 }
 
-impl Task for GroupRelayTask {
-    fn index(&self) -> usize {
-        self.controller_global_epoch
-    }
-}
-
-impl Task for GroupRelayConfirmationTask {
-    fn index(&self) -> usize {
-        self.index
+impl Hash for CommitResult {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.group_epoch.hash(state);
+        self.public_key.hash(state);
+        self.disqualified_nodes.hash(state);
     }
 }
 
@@ -49,6 +80,15 @@ pub struct DKGTask {
     pub coordinator_address: String,
 }
 
+// TODO randomness rewards post-verification
+// pub struct SignatureReward {
+//     signature_task: SignatureTask,
+//     expiration_block_height: usize,
+//     committer: String,
+//     group: Group,
+//     partial_signatures: HashMap<String, Vec<u8>>,
+// }
+
 #[derive(Clone)]
 pub struct GroupRelayTask {
     pub controller_global_epoch: usize,
@@ -67,39 +107,10 @@ pub struct GroupRelayConfirmationTask {
     pub assignment_block_height: usize,
 }
 
-#[derive(Default, Clone, Serialize, Deserialize)]
-pub struct Group {
-    pub index: usize,
-    pub epoch: usize,
-    pub size: usize,
-    pub threshold: usize,
-    pub state: bool,
-    pub public_key: Option<G1>,
-    pub members: HashMap<String, Member>,
-    pub committers: Vec<String>,
-}
-
-impl Group {
-    pub fn new() -> Group {
-        Group {
-            index: 0,
-            epoch: 0,
-            size: 0,
-            threshold: 0,
-            state: false,
-            public_key: None,
-            members: HashMap::new(),
-            committers: vec![],
-        }
-    }
-}
-
-#[derive(Clone, Serialize, Deserialize)]
-pub struct Member {
-    pub index: usize,
-    pub id_address: String,
-    pub rpc_endpint: Option<String>,
-    pub partial_public_key: Option<G1>,
+pub struct GroupRelayCache {
+    pub relayer_committer: String,
+    pub group: Group,
+    pub group_relay_confirmation_task_index: usize,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -157,42 +168,4 @@ impl From<i32> for GroupRelayConfirmationTaskState {
             _ => GroupRelayConfirmationTaskState::NotExisted,
         }
     }
-}
-
-pub enum TaskType {
-    Randomness,
-    GroupRelay,
-    GroupRelayConfirmation,
-}
-
-impl TaskType {
-    pub(crate) fn to_i32(self) -> i32 {
-        match self {
-            TaskType::Randomness => 0,
-            TaskType::GroupRelay => 1,
-            TaskType::GroupRelayConfirmation => 2,
-        }
-    }
-}
-
-impl From<i32> for TaskType {
-    fn from(b: i32) -> Self {
-        match b {
-            1 => TaskType::GroupRelay,
-            2 => TaskType::GroupRelayConfirmation,
-            _ => TaskType::Randomness,
-        }
-    }
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Config {
-    controller_endpoint: String,
-    adapters: Vec<Adapter>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Adapter {
-    name: String,
-    endpoint: String,
 }

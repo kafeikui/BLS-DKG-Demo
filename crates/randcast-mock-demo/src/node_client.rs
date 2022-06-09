@@ -4,11 +4,14 @@ use randcast_mock_demo::node::cache::{
     InMemoryBLSTasksQueue, InMemoryBlockInfoCache, InMemoryGroupInfoCache,
     InMemorySignatureResultCache, NodeInfoFetcher,
 };
-use randcast_mock_demo::node::client::ControllerTransactions;
+use randcast_mock_demo::node::controller_client::ControllerTransactions;
 use randcast_mock_demo::node::monitor::{
     BlockListener, MockBlockListener, MockStartingGroupingListener, StartingGroupingListener,
 };
-use randcast_mock_demo::node::{cache::InMemoryNodeInfoCache, client::MockControllerClient};
+use randcast_mock_demo::node::types::Config;
+use randcast_mock_demo::node::{
+    cache::InMemoryNodeInfoCache, controller_client::MockControllerClient,
+};
 use std::env;
 use std::sync::Arc;
 use threshold_bls::schemes::bls12_381::G1Scheme;
@@ -16,6 +19,11 @@ use threshold_bls::sig::Scheme;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // let yaml_str = include_str!("../config.yml");
+    // let config: Config = serde_yaml::from_str(yaml_str).expect("config.yml read failed!");
+
+    // println!("{:?}", config);
+
     static RNG_FN: fn() -> ThreadRng = rand::thread_rng;
 
     let mut args = env::args();

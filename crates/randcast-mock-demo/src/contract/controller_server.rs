@@ -17,17 +17,16 @@ use self::coordinator::{
 };
 use controller::{
     DkgTaskReply, FulfillRandomnessRequest, GetSignatureTaskCompletionStateReply,
-    GetSignatureTaskCompletionStateRequest, LastOutputReply, MineReply, MineRequest,
-    RequestRandomnessRequest, SignatureTaskReply,
+    GetSignatureTaskCompletionStateRequest, GroupRelayTaskReply, LastOutputReply, MineReply,
+    MineRequest, RequestRandomnessRequest, SignatureTaskReply,
 };
 use parking_lot::RwLock;
 use randcast_mock_demo::contract::{
-    controller::{
-        Controller, DKGTask, Group, Member as ModelMember, MockHelper, SignatureTask,
-        Transactions as ModelControllerTrxs, Views as ModelControllerViews,
-    },
+    adapter::{Adapter, AdapterMockHelper, AdapterTransactions, AdapterViews},
+    controller::{Controller, ControllerMockHelper, ControllerTransactions as ModelControllerTrxs},
     coordinator::{Transactions, Views},
     errors::ControllerError,
+    types::{DKGTask, Group, GroupRelayTask, Member as ModelMember, SignatureTask},
 };
 use std::{collections::HashMap, env, sync::Arc};
 use tonic::{transport::Server, Request, Response, Status};
@@ -196,35 +195,42 @@ impl ControllerViews for MockController {
     ) -> Result<Response<GroupReply>, Status> {
         let req = request.into_inner();
 
-        let Group {
-            index,
-            epoch,
-            capacity,
-            size,
-            threshold,
-            state,
-            public_key,
-            members,
-            committers,
-            ..
-        } = self.controller.read().get_group(req.index as usize).clone();
+        match self.controller.read().get_group(req.index as usize) {
+            Some(group) => {
+                let Group {
+                    index,
+                    epoch,
+                    capacity,
+                    size,
+                    threshold,
+                    state,
+                    public_key,
+                    members,
+                    committers,
+                    ..
+                } = group.clone();
 
-        let members: HashMap<String, Member> = members
-            .into_iter()
-            .map(|(id_address, m)| (id_address, m.into()))
-            .collect();
+                let members: HashMap<String, Member> = members
+                    .into_iter()
+                    .map(|(id_address, m)| (id_address, m.into()))
+                    .collect();
 
-        Ok(Response::new(GroupReply {
-            index: index as u32,
-            epoch: epoch as u32,
-            capacity: capacity as u32,
-            size: size as u32,
-            threshold: threshold as u32,
-            state,
-            public_key,
-            members,
-            committers,
-        }))
+                Ok(Response::new(GroupReply {
+                    index: index as u32,
+                    epoch: epoch as u32,
+                    capacity: capacity as u32,
+                    size: size as u32,
+                    threshold: threshold as u32,
+                    state,
+                    public_key,
+                    members,
+                    committers,
+                }))
+            }
+            None => Err(Status::not_found(
+                ControllerError::GroupNotExisted.to_string(),
+            )),
+        }
     }
 
     async fn emit_dkg_task(&self, _request: Request<()>) -> Result<Response<DkgTaskReply>, Status> {
@@ -307,6 +313,31 @@ impl ControllerViews for MockController {
         return Ok(Response::new(GetSignatureTaskCompletionStateReply {
             state,
         }));
+    }
+
+    async fn emit_group_relay_task(
+        &self,
+        _request: Request<()>,
+    ) -> Result<Response<GroupRelayTaskReply>, Status> {
+        self.controller
+            .read()
+            .emit_group_relay_task()
+            .map(|group_relay_task| {
+                let GroupRelayTask {
+                    controller_global_epoch,
+                    relayed_group_index,
+                    relayed_group_epoch,
+                    assignment_block_height,
+                } = group_relay_task;
+
+                Response::new(GroupRelayTaskReply {
+                    controller_global_epoch: controller_global_epoch as u32,
+                    relayed_group_index: relayed_group_index as u32,
+                    relayed_group_epoch: relayed_group_epoch as u32,
+                    assignment_block_height: assignment_block_height as u32,
+                })
+            })
+            .map_err(|e| Status::not_found(e.to_string()))
     }
 }
 
@@ -466,7 +497,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         initial_entropy
     );
 
-    let controller = Controller::new(initial_entropy, controller_rpc_endpoint);
+    let adapter = Adapter::new(initial_entropy, controller_rpc_endpoint);
+
+    let controller = Controller::new(adapter);
 
     let arc = Arc::new(RwLock::new(controller));
 

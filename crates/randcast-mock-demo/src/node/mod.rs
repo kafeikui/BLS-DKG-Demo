@@ -8,7 +8,11 @@ pub mod dkg;
 
 pub mod bls;
 
-pub mod client;
+pub mod controller_client;
+
+pub mod adapter_client;
+
+pub mod committer_client;
 
 pub mod monitor;
 

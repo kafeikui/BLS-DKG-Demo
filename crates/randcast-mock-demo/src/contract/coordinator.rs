@@ -152,13 +152,13 @@ impl Transactions for Coordinator {
             self.shares.insert(id_address, value);
         } else if blocks_since_start <= 2 * self.phase_duration {
             if self.responses.contains_key(&id_address) {
-                return Err(CoordinatorError::SharesExisted);
+                return Err(CoordinatorError::ResponsesExisted);
             }
 
             self.responses.insert(id_address, value);
         } else if blocks_since_start <= 3 * self.phase_duration {
             if self.justifications.contains_key(&id_address) {
-                return Err(CoordinatorError::SharesExisted);
+                return Err(CoordinatorError::JustificationsExisted);
             }
 
             self.justifications.insert(id_address, value);
@@ -198,21 +198,21 @@ impl Views for Coordinator {
     }
 
     fn in_phase(&self) -> CoordinatorResult<usize> {
-        if self.start_block == 0 {
-            return Ok(0);
-        }
-
         let blocks_since_start = self.block_height - self.start_block;
 
         if blocks_since_start <= self.phase_duration {
-            return Ok(1);
+            return Ok(0);
         }
 
         if blocks_since_start <= 2 * self.phase_duration {
-            return Ok(2);
+            return Ok(1);
         }
 
         if blocks_since_start <= 3 * self.phase_duration {
+            return Ok(2);
+        }
+
+        if blocks_since_start <= 4 * self.phase_duration {
             return Ok(3);
         }
 

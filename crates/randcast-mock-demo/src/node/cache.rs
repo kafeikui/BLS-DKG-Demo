@@ -2,7 +2,10 @@ use std::collections::HashMap;
 
 use super::{
     errors::{NodeError, NodeResult},
-    types::{DKGTask, Group, Member, SignatureTask},
+    types::{
+        BLSTask, DKGTask, Group, GroupRelayConfirmationTask, GroupRelayTask, Member, SignatureTask,
+        Task,
+    },
 };
 use dkg_core::primitives::DKGOutput;
 use threshold_bls::group::Element;
@@ -402,30 +405,30 @@ impl GroupInfoFetcher for InMemoryGroupInfoCache {
     }
 }
 
-pub trait BLSTasksFetcher {
+pub trait BLSTasksFetcher<T> {
     fn contains(&self, task_index: usize) -> bool;
 
-    fn get(&self, task_index: usize) -> Option<&SignatureTask>;
+    fn get(&self, task_index: usize) -> Option<&T>;
 
     fn is_handled(&self, task_index: usize) -> bool;
 }
 
-pub trait BLSTasksUpdater {
-    fn add(&mut self, task: SignatureTask) -> NodeResult<()>;
+pub trait BLSTasksUpdater<T: Task> {
+    fn add(&mut self, task: T) -> NodeResult<()>;
 
     fn check_and_get_available_tasks(
         &mut self,
         current_block_height: usize,
         current_group_index: usize,
-    ) -> Vec<SignatureTask>;
+    ) -> Vec<T>;
 }
 
 #[derive(Default)]
-pub struct InMemoryBLSTasksQueue {
-    bls_tasks: Vec<(SignatureTask, bool)>,
+pub struct InMemoryBLSTasksQueue<T: Task> {
+    bls_tasks: Vec<BLSTask<T>>,
 }
 
-impl InMemoryBLSTasksQueue {
+impl<T: Task> InMemoryBLSTasksQueue<T> {
     pub fn new() -> Self {
         InMemoryBLSTasksQueue {
             bls_tasks: Vec::new(),
@@ -433,30 +436,30 @@ impl InMemoryBLSTasksQueue {
     }
 }
 
-impl BLSTasksFetcher for InMemoryBLSTasksQueue {
+impl<T: Task> BLSTasksFetcher<T> for InMemoryBLSTasksQueue<T> {
     fn contains(&self, task_index: usize) -> bool {
         self.bls_tasks
             .iter()
-            .any(|(task, _)| task.index == task_index)
+            .any(|task| task.task.index() == task_index)
     }
 
-    fn get(&self, task_index: usize) -> Option<&SignatureTask> {
-        self.bls_tasks.get(task_index).map(|(task, _)| task)
+    fn get(&self, task_index: usize) -> Option<&T> {
+        self.bls_tasks.get(task_index).map(|task| &task.task)
     }
 
     fn is_handled(&self, task_index: usize) -> bool {
         *self
             .bls_tasks
             .get(task_index)
-            .map(|(_, state)| state)
+            .map(|task| &task.state)
             .or(Some(&false))
             .unwrap()
     }
 }
 
-impl BLSTasksUpdater for InMemoryBLSTasksQueue {
+impl BLSTasksUpdater<SignatureTask> for InMemoryBLSTasksQueue<SignatureTask> {
     fn add(&mut self, task: SignatureTask) -> NodeResult<()> {
-        self.bls_tasks.push((task, false));
+        self.bls_tasks.push(BLSTask { task, state: false });
         Ok(())
     }
 
@@ -468,14 +471,68 @@ impl BLSTasksUpdater for InMemoryBLSTasksQueue {
         let available_tasks = self
             .bls_tasks
             .iter_mut()
-            .filter(|(_, state)| !state)
-            .filter(|(bls_task, _)| {
-                bls_task.group_index == current_group_index
-                    || current_block_height > bls_task.assignment_block_height + 10
+            .filter(|task| !task.state)
+            .filter(|task| {
+                task.task.group_index == current_group_index
+                    || current_block_height > task.task.assignment_block_height + 10
             })
-            .map(|e| {
-                e.1 = true;
-                e.0.clone()
+            .map(|task| {
+                task.state = true;
+                task.task.clone()
+            })
+            .collect::<Vec<_>>();
+
+        available_tasks
+    }
+}
+
+impl BLSTasksUpdater<GroupRelayTask> for InMemoryBLSTasksQueue<GroupRelayTask> {
+    fn add(&mut self, task: GroupRelayTask) -> NodeResult<()> {
+        self.bls_tasks.push(BLSTask { task, state: false });
+        Ok(())
+    }
+
+    fn check_and_get_available_tasks(
+        &mut self,
+        current_block_height: usize,
+        current_group_index: usize,
+    ) -> Vec<GroupRelayTask> {
+        let available_tasks = self
+            .bls_tasks
+            .iter_mut()
+            .filter(|task| !task.state)
+            .filter(|task| task.task.relayed_group_index != current_group_index)
+            .map(|task| {
+                task.state = true;
+                task.task.clone()
+            })
+            .collect::<Vec<_>>();
+
+        available_tasks
+    }
+}
+
+impl BLSTasksUpdater<GroupRelayConfirmationTask>
+    for InMemoryBLSTasksQueue<GroupRelayConfirmationTask>
+{
+    fn add(&mut self, task: GroupRelayConfirmationTask) -> NodeResult<()> {
+        self.bls_tasks.push(BLSTask { task, state: false });
+        Ok(())
+    }
+
+    fn check_and_get_available_tasks(
+        &mut self,
+        current_block_height: usize,
+        current_group_index: usize,
+    ) -> Vec<GroupRelayConfirmationTask> {
+        let available_tasks = self
+            .bls_tasks
+            .iter_mut()
+            .filter(|task| !task.state)
+            .filter(|task| task.task.relayed_group_index == current_group_index)
+            .map(|task| {
+                task.state = true;
+                task.task.clone()
             })
             .collect::<Vec<_>>();
 

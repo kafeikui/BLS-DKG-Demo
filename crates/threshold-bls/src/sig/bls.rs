@@ -72,6 +72,38 @@ pub mod common {
             Ok(())
         }
 
+        fn internal_aggregation_verify_on_the_same_msg(
+            partial_publics: &[Self::Public],
+            msg: &[u8],
+            sigs: &[Self::Signature],
+            should_hash: bool,
+        ) -> Result<(), BLSError> {
+            let mut sig_aggregation: Self::Signature = Self::Signature::zero();
+            for sig in sigs {
+                sig_aggregation.add(sig);
+            }
+
+            let mut public_aggregation: Self::Public = Self::Public::zero();
+            for partial_public in partial_publics {
+                public_aggregation.add(partial_public);
+            }
+
+            let h = if should_hash {
+                let mut h = Self::Signature::new();
+                h.map(msg).map_err(|_| BLSError::HashingError)?;
+                h
+            } else {
+                bincode::deserialize_from(msg)?
+            };
+
+            let success = Self::final_exp(&public_aggregation, &sig_aggregation, &h);
+            if !success {
+                return Err(BLSError::InvalidSig);
+            }
+
+            Ok(())
+        }
+
         /// Performs the final exponentiation for the BLS sig scheme
         fn final_exp(p: &Self::Public, sig: &Self::Signature, hm: &Self::Signature) -> bool;
     }
@@ -93,6 +125,19 @@ pub mod common {
             sig_bytes: &[u8],
         ) -> Result<(), Self::Error> {
             T::internal_verify(public, msg_bytes, sig_bytes, true)
+        }
+
+        fn aggregation_verify_on_the_same_msg(
+            partial_publics: &[Self::Public],
+            msg_bytes: &[u8],
+            sig_bytes: &[Self::Signature],
+        ) -> Result<(), Self::Error> {
+            T::internal_aggregation_verify_on_the_same_msg(
+                partial_publics,
+                msg_bytes,
+                sig_bytes,
+                true,
+            )
         }
     }
 }

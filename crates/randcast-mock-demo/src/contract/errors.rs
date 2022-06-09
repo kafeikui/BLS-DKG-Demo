@@ -5,6 +5,9 @@ pub type ControllerResult<A> = Result<A, ControllerError>;
 
 #[derive(Debug, Error)]
 pub enum ControllerError {
+    #[error("this is only for admin")]
+    AuthenticationFailed,
+
     #[error("there is no task yet")]
     NoTaskAvailable,
 
@@ -14,14 +17,38 @@ pub enum ControllerError {
     #[error("signature task is still exclusive for the assigned group")]
     TaskStillExclusive,
 
+    #[error("relay task not found in list of relayed_group_cache")]
+    RelayTaskNotFound,
+
+    #[error("relayed_group_epoch is smaller or equal to the latest: {0}")]
+    RelayGroupDataObsolete(usize),
+
+    #[error("confirmed group_cache is different from relayed_group_cache")]
+    RelayGroupDataInconsistency,
+
+    #[error("mismatch between current global epoch and relayed relay_task_index")]
+    RelayFulfillmentNotInOrder,
+
+    #[error("there is already an in-progress relayed_group_cache")]
+    RelayFulfillmentRepeated,
+
+    #[error("the relay confirmation task has not expired yet")]
+    RelayConfirmationTaskStillAvailable,
+
     #[error("signature task can only be fulfilled by the committer")]
     NotFromCommitter,
+
+    #[error("the member: {0} is not contained in the group: {1}")]
+    MemberNotExisted(String, usize),
 
     #[error("the group index is not exist")]
     GroupNotExisted,
 
     #[error("the group is ready to work")]
     GroupActivated,
+
+    #[error("there is already an initial group")]
+    InitialGroupExisted,
 
     #[error("the coordinator with the group index is not exist")]
     CoordinatorNotExisted,

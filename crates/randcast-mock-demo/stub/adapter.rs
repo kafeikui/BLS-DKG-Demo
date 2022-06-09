@@ -1,33 +1,4 @@
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct NodeRegisterRequest {
-    #[prost(string, tag = "1")]
-    pub id_address: ::prost::alloc::string::String,
-    #[prost(bytes = "vec", tag = "2")]
-    pub id_public_key: ::prost::alloc::vec::Vec<u8>,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct CommitDkgRequest {
-    #[prost(string, tag = "1")]
-    pub id_address: ::prost::alloc::string::String,
-    #[prost(uint32, tag = "2")]
-    pub group_index: u32,
-    #[prost(uint32, tag = "3")]
-    pub group_epoch: u32,
-    #[prost(bytes = "vec", tag = "4")]
-    pub public_key: ::prost::alloc::vec::Vec<u8>,
-    #[prost(bytes = "vec", tag = "5")]
-    pub partial_public_key: ::prost::alloc::vec::Vec<u8>,
-    #[prost(string, repeated, tag = "6")]
-    pub disqualified_nodes: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct CheckDkgStateRequest {
-    #[prost(string, tag = "1")]
-    pub id_address: ::prost::alloc::string::String,
-    #[prost(uint32, tag = "2")]
-    pub group_index: u32,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct MineRequest {
     #[prost(uint32, tag = "1")]
     pub block_number_increment: u32,
@@ -55,6 +26,44 @@ pub struct FulfillRandomnessRequest {
     #[prost(map = "string, bytes", tag = "5")]
     pub partial_signatures:
         ::std::collections::HashMap<::prost::alloc::string::String, ::prost::alloc::vec::Vec<u8>>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct SetInitialGroupRequest {
+    #[prost(string, tag = "1")]
+    pub id_address: ::prost::alloc::string::String,
+    #[prost(bytes = "vec", tag = "2")]
+    pub group: ::prost::alloc::vec::Vec<u8>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct FulfillRelayRequest {
+    #[prost(string, tag = "1")]
+    pub id_address: ::prost::alloc::string::String,
+    #[prost(uint32, tag = "2")]
+    pub relayer_group_index: u32,
+    #[prost(uint32, tag = "3")]
+    pub task_index: u32,
+    #[prost(bytes = "vec", tag = "4")]
+    pub signature: ::prost::alloc::vec::Vec<u8>,
+    #[prost(bytes = "vec", tag = "5")]
+    pub group_as_bytes: ::prost::alloc::vec::Vec<u8>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CancelInvalidRelayConfirmationTaskRequest {
+    #[prost(string, tag = "1")]
+    pub id_address: ::prost::alloc::string::String,
+    #[prost(uint32, tag = "2")]
+    pub task_index: u32,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ConfirmRelayRequest {
+    #[prost(string, tag = "1")]
+    pub id_address: ::prost::alloc::string::String,
+    #[prost(uint32, tag = "2")]
+    pub task_index: u32,
+    #[prost(bytes = "vec", tag = "3")]
+    pub group_relay_confirmation_as_bytes: ::prost::alloc::vec::Vec<u8>,
+    #[prost(bytes = "vec", tag = "4")]
+    pub signature: ::prost::alloc::vec::Vec<u8>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct GetGroupRequest {
@@ -92,23 +101,6 @@ pub struct Member {
     pub partial_public_key: ::prost::alloc::vec::Vec<u8>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct DkgTaskReply {
-    #[prost(uint32, tag = "1")]
-    pub group_index: u32,
-    #[prost(uint32, tag = "2")]
-    pub epoch: u32,
-    #[prost(uint32, tag = "3")]
-    pub size: u32,
-    #[prost(uint32, tag = "4")]
-    pub threshold: u32,
-    #[prost(map = "string, uint32", tag = "5")]
-    pub members: ::std::collections::HashMap<::prost::alloc::string::String, u32>,
-    #[prost(uint32, tag = "6")]
-    pub assignment_block_height: u32,
-    #[prost(string, tag = "7")]
-    pub coordinator_address: ::prost::alloc::string::String,
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SignatureTaskReply {
     #[prost(uint32, tag = "1")]
     pub index: u32,
@@ -135,15 +127,47 @@ pub struct GetSignatureTaskCompletionStateReply {
     pub state: bool,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct GroupRelayTaskReply {
+pub struct GroupRelayConfirmationTaskReply {
     #[prost(uint32, tag = "1")]
-    pub controller_global_epoch: u32,
+    pub index: u32,
     #[prost(uint32, tag = "2")]
-    pub relayed_group_index: u32,
+    pub group_relay_cache_index: u32,
     #[prost(uint32, tag = "3")]
-    pub relayed_group_epoch: u32,
+    pub relayed_group_index: u32,
     #[prost(uint32, tag = "4")]
+    pub relayed_group_epoch: u32,
+    #[prost(uint32, tag = "5")]
+    pub relayer_group_index: u32,
+    #[prost(uint32, tag = "6")]
     pub assignment_block_height: u32,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct GetGroupRelayCacheRequest {
+    #[prost(uint32, tag = "1")]
+    pub index: u32,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct GetGroupRelayConfirmationTaskStateRequest {
+    #[prost(uint32, tag = "1")]
+    pub index: u32,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct GetGroupRelayConfirmationTaskStateReply {
+    #[prost(
+        enumeration = "get_group_relay_confirmation_task_state_reply::GroupRelayConfirmationTaskState",
+        tag = "1"
+    )]
+    pub state: i32,
+}
+/// Nested message and enum types in `GetGroupRelayConfirmationTaskStateReply`.
+pub mod get_group_relay_confirmation_task_state_reply {
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+    #[repr(i32)]
+    pub enum GroupRelayConfirmationTaskState {
+        NotExisted = 0,
+        Available = 1,
+        Invalid = 2,
+    }
 }
 #[doc = r" Generated client implementations."]
 pub mod transactions_client {
@@ -205,50 +229,6 @@ pub mod transactions_client {
             self.inner = self.inner.accept_gzip();
             self
         }
-        pub async fn node_register(
-            &mut self,
-            request: impl tonic::IntoRequest<super::NodeRegisterRequest>,
-        ) -> Result<tonic::Response<()>, tonic::Status> {
-            self.inner.ready().await.map_err(|e| {
-                tonic::Status::new(
-                    tonic::Code::Unknown,
-                    format!("Service was not ready: {}", e.into()),
-                )
-            })?;
-            let codec = tonic::codec::ProstCodec::default();
-            let path =
-                http::uri::PathAndQuery::from_static("/controller.Transactions/NodeRegister");
-            self.inner.unary(request.into_request(), path, codec).await
-        }
-        pub async fn commit_dkg(
-            &mut self,
-            request: impl tonic::IntoRequest<super::CommitDkgRequest>,
-        ) -> Result<tonic::Response<()>, tonic::Status> {
-            self.inner.ready().await.map_err(|e| {
-                tonic::Status::new(
-                    tonic::Code::Unknown,
-                    format!("Service was not ready: {}", e.into()),
-                )
-            })?;
-            let codec = tonic::codec::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static("/controller.Transactions/CommitDkg");
-            self.inner.unary(request.into_request(), path, codec).await
-        }
-        pub async fn check_dkg_state(
-            &mut self,
-            request: impl tonic::IntoRequest<super::CheckDkgStateRequest>,
-        ) -> Result<tonic::Response<()>, tonic::Status> {
-            self.inner.ready().await.map_err(|e| {
-                tonic::Status::new(
-                    tonic::Code::Unknown,
-                    format!("Service was not ready: {}", e.into()),
-                )
-            })?;
-            let codec = tonic::codec::ProstCodec::default();
-            let path =
-                http::uri::PathAndQuery::from_static("/controller.Transactions/CheckDkgState");
-            self.inner.unary(request.into_request(), path, codec).await
-        }
         pub async fn mine(
             &mut self,
             request: impl tonic::IntoRequest<super::MineRequest>,
@@ -260,7 +240,7 @@ pub mod transactions_client {
                 )
             })?;
             let codec = tonic::codec::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static("/controller.Transactions/Mine");
+            let path = http::uri::PathAndQuery::from_static("/adapter.Transactions/Mine");
             self.inner.unary(request.into_request(), path, codec).await
         }
         pub async fn request_randomness(
@@ -275,7 +255,7 @@ pub mod transactions_client {
             })?;
             let codec = tonic::codec::ProstCodec::default();
             let path =
-                http::uri::PathAndQuery::from_static("/controller.Transactions/RequestRandomness");
+                http::uri::PathAndQuery::from_static("/adapter.Transactions/RequestRandomness");
             self.inner.unary(request.into_request(), path, codec).await
         }
         pub async fn fulfill_randomness(
@@ -290,7 +270,66 @@ pub mod transactions_client {
             })?;
             let codec = tonic::codec::ProstCodec::default();
             let path =
-                http::uri::PathAndQuery::from_static("/controller.Transactions/FulfillRandomness");
+                http::uri::PathAndQuery::from_static("/adapter.Transactions/FulfillRandomness");
+            self.inner.unary(request.into_request(), path, codec).await
+        }
+        pub async fn set_initial_group(
+            &mut self,
+            request: impl tonic::IntoRequest<super::SetInitialGroupRequest>,
+        ) -> Result<tonic::Response<()>, tonic::Status> {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::new(
+                    tonic::Code::Unknown,
+                    format!("Service was not ready: {}", e.into()),
+                )
+            })?;
+            let codec = tonic::codec::ProstCodec::default();
+            let path =
+                http::uri::PathAndQuery::from_static("/adapter.Transactions/SetInitialGroup");
+            self.inner.unary(request.into_request(), path, codec).await
+        }
+        pub async fn fulfill_relay(
+            &mut self,
+            request: impl tonic::IntoRequest<super::FulfillRelayRequest>,
+        ) -> Result<tonic::Response<()>, tonic::Status> {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::new(
+                    tonic::Code::Unknown,
+                    format!("Service was not ready: {}", e.into()),
+                )
+            })?;
+            let codec = tonic::codec::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static("/adapter.Transactions/FulfillRelay");
+            self.inner.unary(request.into_request(), path, codec).await
+        }
+        pub async fn cancel_invalid_relay_confirmation_task(
+            &mut self,
+            request: impl tonic::IntoRequest<super::CancelInvalidRelayConfirmationTaskRequest>,
+        ) -> Result<tonic::Response<()>, tonic::Status> {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::new(
+                    tonic::Code::Unknown,
+                    format!("Service was not ready: {}", e.into()),
+                )
+            })?;
+            let codec = tonic::codec::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/adapter.Transactions/CancelInvalidRelayConfirmationTask",
+            );
+            self.inner.unary(request.into_request(), path, codec).await
+        }
+        pub async fn confirm_relay(
+            &mut self,
+            request: impl tonic::IntoRequest<super::ConfirmRelayRequest>,
+        ) -> Result<tonic::Response<()>, tonic::Status> {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::new(
+                    tonic::Code::Unknown,
+                    format!("Service was not ready: {}", e.into()),
+                )
+            })?;
+            let codec = tonic::codec::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static("/adapter.Transactions/ConfirmRelay");
             self.inner.unary(request.into_request(), path, codec).await
         }
     }
@@ -366,7 +405,7 @@ pub mod views_client {
                 )
             })?;
             let codec = tonic::codec::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static("/controller.Views/GetGroup");
+            let path = http::uri::PathAndQuery::from_static("/adapter.Views/GetGroup");
             self.inner.unary(request.into_request(), path, codec).await
         }
         pub async fn get_last_output(
@@ -380,21 +419,7 @@ pub mod views_client {
                 )
             })?;
             let codec = tonic::codec::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static("/controller.Views/GetLastOutput");
-            self.inner.unary(request.into_request(), path, codec).await
-        }
-        pub async fn emit_dkg_task(
-            &mut self,
-            request: impl tonic::IntoRequest<()>,
-        ) -> Result<tonic::Response<super::DkgTaskReply>, tonic::Status> {
-            self.inner.ready().await.map_err(|e| {
-                tonic::Status::new(
-                    tonic::Code::Unknown,
-                    format!("Service was not ready: {}", e.into()),
-                )
-            })?;
-            let codec = tonic::codec::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static("/controller.Views/EmitDkgTask");
+            let path = http::uri::PathAndQuery::from_static("/adapter.Views/GetLastOutput");
             self.inner.unary(request.into_request(), path, codec).await
         }
         pub async fn emit_signature_task(
@@ -408,7 +433,7 @@ pub mod views_client {
                 )
             })?;
             let codec = tonic::codec::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static("/controller.Views/EmitSignatureTask");
+            let path = http::uri::PathAndQuery::from_static("/adapter.Views/EmitSignatureTask");
             self.inner.unary(request.into_request(), path, codec).await
         }
         pub async fn get_signature_task_completion_state(
@@ -424,14 +449,14 @@ pub mod views_client {
             })?;
             let codec = tonic::codec::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
-                "/controller.Views/GetSignatureTaskCompletionState",
+                "/adapter.Views/GetSignatureTaskCompletionState",
             );
             self.inner.unary(request.into_request(), path, codec).await
         }
-        pub async fn emit_group_relay_task(
+        pub async fn get_group_relay_cache(
             &mut self,
-            request: impl tonic::IntoRequest<()>,
-        ) -> Result<tonic::Response<super::GroupRelayTaskReply>, tonic::Status> {
+            request: impl tonic::IntoRequest<super::GetGroupRelayCacheRequest>,
+        ) -> Result<tonic::Response<super::GroupReply>, tonic::Status> {
             self.inner.ready().await.map_err(|e| {
                 tonic::Status::new(
                     tonic::Code::Unknown,
@@ -439,7 +464,41 @@ pub mod views_client {
                 )
             })?;
             let codec = tonic::codec::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static("/controller.Views/EmitGroupRelayTask");
+            let path = http::uri::PathAndQuery::from_static("/adapter.Views/GetGroupRelayCache");
+            self.inner.unary(request.into_request(), path, codec).await
+        }
+        pub async fn get_group_relay_confirmation_task_state(
+            &mut self,
+            request: impl tonic::IntoRequest<super::GetGroupRelayConfirmationTaskStateRequest>,
+        ) -> Result<tonic::Response<super::GetGroupRelayConfirmationTaskStateReply>, tonic::Status>
+        {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::new(
+                    tonic::Code::Unknown,
+                    format!("Service was not ready: {}", e.into()),
+                )
+            })?;
+            let codec = tonic::codec::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/adapter.Views/GetGroupRelayConfirmationTaskState",
+            );
+            self.inner.unary(request.into_request(), path, codec).await
+        }
+        pub async fn emit_group_relay_confirmation_task(
+            &mut self,
+            request: impl tonic::IntoRequest<()>,
+        ) -> Result<tonic::Response<super::GroupRelayConfirmationTaskReply>, tonic::Status>
+        {
+            self.inner.ready().await.map_err(|e| {
+                tonic::Status::new(
+                    tonic::Code::Unknown,
+                    format!("Service was not ready: {}", e.into()),
+                )
+            })?;
+            let codec = tonic::codec::ProstCodec::default();
+            let path = http::uri::PathAndQuery::from_static(
+                "/adapter.Views/EmitGroupRelayConfirmationTask",
+            );
             self.inner.unary(request.into_request(), path, codec).await
         }
     }
@@ -451,18 +510,6 @@ pub mod transactions_server {
     #[doc = "Generated trait containing gRPC methods that should be implemented for use with TransactionsServer."]
     #[async_trait]
     pub trait Transactions: Send + Sync + 'static {
-        async fn node_register(
-            &self,
-            request: tonic::Request<super::NodeRegisterRequest>,
-        ) -> Result<tonic::Response<()>, tonic::Status>;
-        async fn commit_dkg(
-            &self,
-            request: tonic::Request<super::CommitDkgRequest>,
-        ) -> Result<tonic::Response<()>, tonic::Status>;
-        async fn check_dkg_state(
-            &self,
-            request: tonic::Request<super::CheckDkgStateRequest>,
-        ) -> Result<tonic::Response<()>, tonic::Status>;
         async fn mine(
             &self,
             request: tonic::Request<super::MineRequest>,
@@ -474,6 +521,22 @@ pub mod transactions_server {
         async fn fulfill_randomness(
             &self,
             request: tonic::Request<super::FulfillRandomnessRequest>,
+        ) -> Result<tonic::Response<()>, tonic::Status>;
+        async fn set_initial_group(
+            &self,
+            request: tonic::Request<super::SetInitialGroupRequest>,
+        ) -> Result<tonic::Response<()>, tonic::Status>;
+        async fn fulfill_relay(
+            &self,
+            request: tonic::Request<super::FulfillRelayRequest>,
+        ) -> Result<tonic::Response<()>, tonic::Status>;
+        async fn cancel_invalid_relay_confirmation_task(
+            &self,
+            request: tonic::Request<super::CancelInvalidRelayConfirmationTaskRequest>,
+        ) -> Result<tonic::Response<()>, tonic::Status>;
+        async fn confirm_relay(
+            &self,
+            request: tonic::Request<super::ConfirmRelayRequest>,
         ) -> Result<tonic::Response<()>, tonic::Status>;
     }
     #[derive(Debug)]
@@ -515,104 +578,7 @@ pub mod transactions_server {
         fn call(&mut self, req: http::Request<B>) -> Self::Future {
             let inner = self.inner.clone();
             match req.uri().path() {
-                "/controller.Transactions/NodeRegister" => {
-                    #[allow(non_camel_case_types)]
-                    struct NodeRegisterSvc<T: Transactions>(pub Arc<T>);
-                    impl<T: Transactions> tonic::server::UnaryService<super::NodeRegisterRequest>
-                        for NodeRegisterSvc<T>
-                    {
-                        type Response = ();
-                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
-                        fn call(
-                            &mut self,
-                            request: tonic::Request<super::NodeRegisterRequest>,
-                        ) -> Self::Future {
-                            let inner = self.0.clone();
-                            let fut = async move { (*inner).node_register(request).await };
-                            Box::pin(fut)
-                        }
-                    }
-                    let accept_compression_encodings = self.accept_compression_encodings;
-                    let send_compression_encodings = self.send_compression_encodings;
-                    let inner = self.inner.clone();
-                    let fut = async move {
-                        let inner = inner.0;
-                        let method = NodeRegisterSvc(inner);
-                        let codec = tonic::codec::ProstCodec::default();
-                        let mut grpc = tonic::server::Grpc::new(codec).apply_compression_config(
-                            accept_compression_encodings,
-                            send_compression_encodings,
-                        );
-                        let res = grpc.unary(method, req).await;
-                        Ok(res)
-                    };
-                    Box::pin(fut)
-                }
-                "/controller.Transactions/CommitDkg" => {
-                    #[allow(non_camel_case_types)]
-                    struct CommitDkgSvc<T: Transactions>(pub Arc<T>);
-                    impl<T: Transactions> tonic::server::UnaryService<super::CommitDkgRequest> for CommitDkgSvc<T> {
-                        type Response = ();
-                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
-                        fn call(
-                            &mut self,
-                            request: tonic::Request<super::CommitDkgRequest>,
-                        ) -> Self::Future {
-                            let inner = self.0.clone();
-                            let fut = async move { (*inner).commit_dkg(request).await };
-                            Box::pin(fut)
-                        }
-                    }
-                    let accept_compression_encodings = self.accept_compression_encodings;
-                    let send_compression_encodings = self.send_compression_encodings;
-                    let inner = self.inner.clone();
-                    let fut = async move {
-                        let inner = inner.0;
-                        let method = CommitDkgSvc(inner);
-                        let codec = tonic::codec::ProstCodec::default();
-                        let mut grpc = tonic::server::Grpc::new(codec).apply_compression_config(
-                            accept_compression_encodings,
-                            send_compression_encodings,
-                        );
-                        let res = grpc.unary(method, req).await;
-                        Ok(res)
-                    };
-                    Box::pin(fut)
-                }
-                "/controller.Transactions/CheckDkgState" => {
-                    #[allow(non_camel_case_types)]
-                    struct CheckDkgStateSvc<T: Transactions>(pub Arc<T>);
-                    impl<T: Transactions> tonic::server::UnaryService<super::CheckDkgStateRequest>
-                        for CheckDkgStateSvc<T>
-                    {
-                        type Response = ();
-                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
-                        fn call(
-                            &mut self,
-                            request: tonic::Request<super::CheckDkgStateRequest>,
-                        ) -> Self::Future {
-                            let inner = self.0.clone();
-                            let fut = async move { (*inner).check_dkg_state(request).await };
-                            Box::pin(fut)
-                        }
-                    }
-                    let accept_compression_encodings = self.accept_compression_encodings;
-                    let send_compression_encodings = self.send_compression_encodings;
-                    let inner = self.inner.clone();
-                    let fut = async move {
-                        let inner = inner.0;
-                        let method = CheckDkgStateSvc(inner);
-                        let codec = tonic::codec::ProstCodec::default();
-                        let mut grpc = tonic::server::Grpc::new(codec).apply_compression_config(
-                            accept_compression_encodings,
-                            send_compression_encodings,
-                        );
-                        let res = grpc.unary(method, req).await;
-                        Ok(res)
-                    };
-                    Box::pin(fut)
-                }
-                "/controller.Transactions/Mine" => {
+                "/adapter.Transactions/Mine" => {
                     #[allow(non_camel_case_types)]
                     struct MineSvc<T: Transactions>(pub Arc<T>);
                     impl<T: Transactions> tonic::server::UnaryService<super::MineRequest> for MineSvc<T> {
@@ -643,7 +609,7 @@ pub mod transactions_server {
                     };
                     Box::pin(fut)
                 }
-                "/controller.Transactions/RequestRandomness" => {
+                "/adapter.Transactions/RequestRandomness" => {
                     #[allow(non_camel_case_types)]
                     struct RequestRandomnessSvc<T: Transactions>(pub Arc<T>);
                     impl<T: Transactions>
@@ -677,7 +643,7 @@ pub mod transactions_server {
                     };
                     Box::pin(fut)
                 }
-                "/controller.Transactions/FulfillRandomness" => {
+                "/adapter.Transactions/FulfillRandomness" => {
                     #[allow(non_camel_case_types)]
                     struct FulfillRandomnessSvc<T: Transactions>(pub Arc<T>);
                     impl<T: Transactions>
@@ -701,6 +667,146 @@ pub mod transactions_server {
                     let fut = async move {
                         let inner = inner.0;
                         let method = FulfillRandomnessSvc(inner);
+                        let codec = tonic::codec::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec).apply_compression_config(
+                            accept_compression_encodings,
+                            send_compression_encodings,
+                        );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/adapter.Transactions/SetInitialGroup" => {
+                    #[allow(non_camel_case_types)]
+                    struct SetInitialGroupSvc<T: Transactions>(pub Arc<T>);
+                    impl<T: Transactions> tonic::server::UnaryService<super::SetInitialGroupRequest>
+                        for SetInitialGroupSvc<T>
+                    {
+                        type Response = ();
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::SetInitialGroupRequest>,
+                        ) -> Self::Future {
+                            let inner = self.0.clone();
+                            let fut = async move { (*inner).set_initial_group(request).await };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let inner = inner.0;
+                        let method = SetInitialGroupSvc(inner);
+                        let codec = tonic::codec::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec).apply_compression_config(
+                            accept_compression_encodings,
+                            send_compression_encodings,
+                        );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/adapter.Transactions/FulfillRelay" => {
+                    #[allow(non_camel_case_types)]
+                    struct FulfillRelaySvc<T: Transactions>(pub Arc<T>);
+                    impl<T: Transactions> tonic::server::UnaryService<super::FulfillRelayRequest>
+                        for FulfillRelaySvc<T>
+                    {
+                        type Response = ();
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::FulfillRelayRequest>,
+                        ) -> Self::Future {
+                            let inner = self.0.clone();
+                            let fut = async move { (*inner).fulfill_relay(request).await };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let inner = inner.0;
+                        let method = FulfillRelaySvc(inner);
+                        let codec = tonic::codec::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec).apply_compression_config(
+                            accept_compression_encodings,
+                            send_compression_encodings,
+                        );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/adapter.Transactions/CancelInvalidRelayConfirmationTask" => {
+                    #[allow(non_camel_case_types)]
+                    struct CancelInvalidRelayConfirmationTaskSvc<T: Transactions>(pub Arc<T>);
+                    impl<T: Transactions>
+                        tonic::server::UnaryService<
+                            super::CancelInvalidRelayConfirmationTaskRequest,
+                        > for CancelInvalidRelayConfirmationTaskSvc<T>
+                    {
+                        type Response = ();
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<
+                                super::CancelInvalidRelayConfirmationTaskRequest,
+                            >,
+                        ) -> Self::Future {
+                            let inner = self.0.clone();
+                            let fut = async move {
+                                (*inner)
+                                    .cancel_invalid_relay_confirmation_task(request)
+                                    .await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let inner = inner.0;
+                        let method = CancelInvalidRelayConfirmationTaskSvc(inner);
+                        let codec = tonic::codec::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec).apply_compression_config(
+                            accept_compression_encodings,
+                            send_compression_encodings,
+                        );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/adapter.Transactions/ConfirmRelay" => {
+                    #[allow(non_camel_case_types)]
+                    struct ConfirmRelaySvc<T: Transactions>(pub Arc<T>);
+                    impl<T: Transactions> tonic::server::UnaryService<super::ConfirmRelayRequest>
+                        for ConfirmRelaySvc<T>
+                    {
+                        type Response = ();
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::ConfirmRelayRequest>,
+                        ) -> Self::Future {
+                            let inner = self.0.clone();
+                            let fut = async move { (*inner).confirm_relay(request).await };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let inner = inner.0;
+                        let method = ConfirmRelaySvc(inner);
                         let codec = tonic::codec::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec).apply_compression_config(
                             accept_compression_encodings,
@@ -743,7 +849,7 @@ pub mod transactions_server {
         }
     }
     impl<T: Transactions> tonic::transport::NamedService for TransactionsServer<T> {
-        const NAME: &'static str = "controller.Transactions";
+        const NAME: &'static str = "adapter.Transactions";
     }
 }
 #[doc = r" Generated server implementations."]
@@ -761,10 +867,6 @@ pub mod views_server {
             &self,
             request: tonic::Request<()>,
         ) -> Result<tonic::Response<super::LastOutputReply>, tonic::Status>;
-        async fn emit_dkg_task(
-            &self,
-            request: tonic::Request<()>,
-        ) -> Result<tonic::Response<super::DkgTaskReply>, tonic::Status>;
         async fn emit_signature_task(
             &self,
             request: tonic::Request<()>,
@@ -773,10 +875,18 @@ pub mod views_server {
             &self,
             request: tonic::Request<super::GetSignatureTaskCompletionStateRequest>,
         ) -> Result<tonic::Response<super::GetSignatureTaskCompletionStateReply>, tonic::Status>;
-        async fn emit_group_relay_task(
+        async fn get_group_relay_cache(
+            &self,
+            request: tonic::Request<super::GetGroupRelayCacheRequest>,
+        ) -> Result<tonic::Response<super::GroupReply>, tonic::Status>;
+        async fn get_group_relay_confirmation_task_state(
+            &self,
+            request: tonic::Request<super::GetGroupRelayConfirmationTaskStateRequest>,
+        ) -> Result<tonic::Response<super::GetGroupRelayConfirmationTaskStateReply>, tonic::Status>;
+        async fn emit_group_relay_confirmation_task(
             &self,
             request: tonic::Request<()>,
-        ) -> Result<tonic::Response<super::GroupRelayTaskReply>, tonic::Status>;
+        ) -> Result<tonic::Response<super::GroupRelayConfirmationTaskReply>, tonic::Status>;
     }
     #[derive(Debug)]
     pub struct ViewsServer<T: Views> {
@@ -817,7 +927,7 @@ pub mod views_server {
         fn call(&mut self, req: http::Request<B>) -> Self::Future {
             let inner = self.inner.clone();
             match req.uri().path() {
-                "/controller.Views/GetGroup" => {
+                "/adapter.Views/GetGroup" => {
                     #[allow(non_camel_case_types)]
                     struct GetGroupSvc<T: Views>(pub Arc<T>);
                     impl<T: Views> tonic::server::UnaryService<super::GetGroupRequest> for GetGroupSvc<T> {
@@ -848,7 +958,7 @@ pub mod views_server {
                     };
                     Box::pin(fut)
                 }
-                "/controller.Views/GetLastOutput" => {
+                "/adapter.Views/GetLastOutput" => {
                     #[allow(non_camel_case_types)]
                     struct GetLastOutputSvc<T: Views>(pub Arc<T>);
                     impl<T: Views> tonic::server::UnaryService<()> for GetLastOutputSvc<T> {
@@ -876,35 +986,7 @@ pub mod views_server {
                     };
                     Box::pin(fut)
                 }
-                "/controller.Views/EmitDkgTask" => {
-                    #[allow(non_camel_case_types)]
-                    struct EmitDkgTaskSvc<T: Views>(pub Arc<T>);
-                    impl<T: Views> tonic::server::UnaryService<()> for EmitDkgTaskSvc<T> {
-                        type Response = super::DkgTaskReply;
-                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
-                        fn call(&mut self, request: tonic::Request<()>) -> Self::Future {
-                            let inner = self.0.clone();
-                            let fut = async move { (*inner).emit_dkg_task(request).await };
-                            Box::pin(fut)
-                        }
-                    }
-                    let accept_compression_encodings = self.accept_compression_encodings;
-                    let send_compression_encodings = self.send_compression_encodings;
-                    let inner = self.inner.clone();
-                    let fut = async move {
-                        let inner = inner.0;
-                        let method = EmitDkgTaskSvc(inner);
-                        let codec = tonic::codec::ProstCodec::default();
-                        let mut grpc = tonic::server::Grpc::new(codec).apply_compression_config(
-                            accept_compression_encodings,
-                            send_compression_encodings,
-                        );
-                        let res = grpc.unary(method, req).await;
-                        Ok(res)
-                    };
-                    Box::pin(fut)
-                }
-                "/controller.Views/EmitSignatureTask" => {
+                "/adapter.Views/EmitSignatureTask" => {
                     #[allow(non_camel_case_types)]
                     struct EmitSignatureTaskSvc<T: Views>(pub Arc<T>);
                     impl<T: Views> tonic::server::UnaryService<()> for EmitSignatureTaskSvc<T> {
@@ -932,7 +1014,7 @@ pub mod views_server {
                     };
                     Box::pin(fut)
                 }
-                "/controller.Views/GetSignatureTaskCompletionState" => {
+                "/adapter.Views/GetSignatureTaskCompletionState" => {
                     #[allow(non_camel_case_types)]
                     struct GetSignatureTaskCompletionStateSvc<T: Views>(pub Arc<T>);
                     impl<T: Views>
@@ -968,15 +1050,20 @@ pub mod views_server {
                     };
                     Box::pin(fut)
                 }
-                "/controller.Views/EmitGroupRelayTask" => {
+                "/adapter.Views/GetGroupRelayCache" => {
                     #[allow(non_camel_case_types)]
-                    struct EmitGroupRelayTaskSvc<T: Views>(pub Arc<T>);
-                    impl<T: Views> tonic::server::UnaryService<()> for EmitGroupRelayTaskSvc<T> {
-                        type Response = super::GroupRelayTaskReply;
+                    struct GetGroupRelayCacheSvc<T: Views>(pub Arc<T>);
+                    impl<T: Views> tonic::server::UnaryService<super::GetGroupRelayCacheRequest>
+                        for GetGroupRelayCacheSvc<T>
+                    {
+                        type Response = super::GroupReply;
                         type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
-                        fn call(&mut self, request: tonic::Request<()>) -> Self::Future {
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<super::GetGroupRelayCacheRequest>,
+                        ) -> Self::Future {
                             let inner = self.0.clone();
-                            let fut = async move { (*inner).emit_group_relay_task(request).await };
+                            let fut = async move { (*inner).get_group_relay_cache(request).await };
                             Box::pin(fut)
                         }
                     }
@@ -985,7 +1072,78 @@ pub mod views_server {
                     let inner = self.inner.clone();
                     let fut = async move {
                         let inner = inner.0;
-                        let method = EmitGroupRelayTaskSvc(inner);
+                        let method = GetGroupRelayCacheSvc(inner);
+                        let codec = tonic::codec::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec).apply_compression_config(
+                            accept_compression_encodings,
+                            send_compression_encodings,
+                        );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/adapter.Views/GetGroupRelayConfirmationTaskState" => {
+                    #[allow(non_camel_case_types)]
+                    struct GetGroupRelayConfirmationTaskStateSvc<T: Views>(pub Arc<T>);
+                    impl<T: Views>
+                        tonic::server::UnaryService<
+                            super::GetGroupRelayConfirmationTaskStateRequest,
+                        > for GetGroupRelayConfirmationTaskStateSvc<T>
+                    {
+                        type Response = super::GetGroupRelayConfirmationTaskStateReply;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        fn call(
+                            &mut self,
+                            request: tonic::Request<
+                                super::GetGroupRelayConfirmationTaskStateRequest,
+                            >,
+                        ) -> Self::Future {
+                            let inner = self.0.clone();
+                            let fut = async move {
+                                (*inner)
+                                    .get_group_relay_confirmation_task_state(request)
+                                    .await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let inner = inner.0;
+                        let method = GetGroupRelayConfirmationTaskStateSvc(inner);
+                        let codec = tonic::codec::ProstCodec::default();
+                        let mut grpc = tonic::server::Grpc::new(codec).apply_compression_config(
+                            accept_compression_encodings,
+                            send_compression_encodings,
+                        );
+                        let res = grpc.unary(method, req).await;
+                        Ok(res)
+                    };
+                    Box::pin(fut)
+                }
+                "/adapter.Views/EmitGroupRelayConfirmationTask" => {
+                    #[allow(non_camel_case_types)]
+                    struct EmitGroupRelayConfirmationTaskSvc<T: Views>(pub Arc<T>);
+                    impl<T: Views> tonic::server::UnaryService<()> for EmitGroupRelayConfirmationTaskSvc<T> {
+                        type Response = super::GroupRelayConfirmationTaskReply;
+                        type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+                        fn call(&mut self, request: tonic::Request<()>) -> Self::Future {
+                            let inner = self.0.clone();
+                            let fut = async move {
+                                (*inner).emit_group_relay_confirmation_task(request).await
+                            };
+                            Box::pin(fut)
+                        }
+                    }
+                    let accept_compression_encodings = self.accept_compression_encodings;
+                    let send_compression_encodings = self.send_compression_encodings;
+                    let inner = self.inner.clone();
+                    let fut = async move {
+                        let inner = inner.0;
+                        let method = EmitGroupRelayConfirmationTaskSvc(inner);
                         let codec = tonic::codec::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec).apply_compression_config(
                             accept_compression_encodings,
@@ -1028,6 +1186,6 @@ pub mod views_server {
         }
     }
     impl<T: Views> tonic::transport::NamedService for ViewsServer<T> {
-        const NAME: &'static str = "controller.Views";
+        const NAME: &'static str = "adapter.Views";
     }
 }

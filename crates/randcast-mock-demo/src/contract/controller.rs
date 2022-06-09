@@ -1,37 +1,28 @@
+use super::adapter::{Adapter, AdapterViews};
 use super::coordinator::{
     Coordinator, MockHelper as CoordinatorMockHelper, Transactions as CoordinatorTransactions,
     Views as CoordinatorViews,
 };
 use super::errors::{ControllerError, ControllerResult};
+use super::types::{CommitCache, CommitResult, DKGTask, Group, GroupRelayTask, Member, Node};
+use super::utils::choose_randomly_from_indices;
 use dkg_core::primitives::minimum_threshold;
 use std::cmp::{max, Ordering};
-use std::collections::hash_map::DefaultHasher;
 use std::collections::{HashMap, HashSet};
-use std::hash::{Hash, Hasher};
+use std::ops::{Deref, DerefMut};
 use threshold_bls::curve::bls12381::G1;
-use threshold_bls::poly::Eval;
-use threshold_bls::schemes::bls12_381::G1Scheme as SigScheme;
-use threshold_bls::sig::SignatureScheme;
 
 pub const NODE_STAKING_AMOUNT: usize = 50000;
-
-pub const REWARD_PER_SIGNATURE: usize = 50;
 
 pub const DISQUALIFIED_NODE_PENALTY: usize = 1000;
 
 pub const COORDINATOR_STATE_TRIGGER_REWARD: usize = 100;
 
-pub const COMMITTER_REWARD_PER_SIGNATURE: usize = 100;
-
-pub const COMMITTER_PENALTY_PER_SIGNATURE: usize = 1000;
-
-pub const CHALLENGE_REWARD_PER_SIGNATURE: usize = 300;
-
 pub const DEFAULT_MINIMUM_THRESHOLD: usize = 3;
 
 pub const DEFAULT_COMMITTERS_SIZE: usize = 3;
 
-pub const DEFAULT_DKG_PHASE_DURATION: usize = 30;
+pub const DEFAULT_DKG_PHASE_DURATION: usize = 10;
 
 pub const GROUP_MAX_CAPACITY: usize = 10;
 
@@ -39,135 +30,55 @@ pub const EXPECTED_GROUP_SIZE: usize = 5;
 
 pub const PENDING_BLOCK_AFTER_QUIT: usize = 100;
 
-pub const SIGNATURE_TASK_EXCLUSIVE_WINDOW: usize = 10;
+impl Deref for Controller {
+    type Target = Adapter;
 
-pub const SIGNATURE_REWARDS_VALIDATION_WINDOW: usize = 50;
+    fn deref(&self) -> &Self::Target {
+        &self.base
+    }
+}
+
+impl DerefMut for Controller {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.base
+    }
+}
 
 pub struct Controller {
-    pub block_height: usize,
-    pub epoch: usize,
-    pub signature_count: usize,
-    pub last_output: u64,
-    pub last_group_index: usize,
-    groups: HashMap<usize, Group>,
+    base: Adapter,
     nodes: HashMap<String, Node>,
-    pub rewards: HashMap<String, usize>,
-    pending_signature_tasks: HashMap<usize, SignatureTask>,
-    verifiable_signature_rewards: HashMap<usize, SignatureReward>,
+    adapters: HashMap<String, String>,
     // mock for locally test environment
     dkg_task: Option<DKGTask>,
-    signature_task: Option<SignatureTask>,
+    group_relay_task: Option<GroupRelayTask>,
     pub coordinators: HashMap<usize, (String, Coordinator)>,
-    controller_address: String,
 }
 
 impl Controller {
-    pub fn new(initial_entropy: u64, controller_address: String) -> Self {
+    pub fn new(adapter: Adapter) -> Self {
         Controller {
-            block_height: 100,
-            epoch: 1,
-            signature_count: 0,
-            last_output: initial_entropy,
-            last_group_index: 0,
-            groups: HashMap::new(),
+            base: adapter,
             nodes: HashMap::new(),
-            rewards: HashMap::new(),
-            pending_signature_tasks: HashMap::new(),
-            verifiable_signature_rewards: HashMap::new(),
+            adapters: HashMap::new(),
             dkg_task: None,
-            signature_task: None,
+            group_relay_task: None,
             coordinators: HashMap::new(),
-            controller_address,
         }
     }
-}
 
-pub struct Node {
-    pub id_address: String,
-    pub id_public_key: Vec<u8>,
-    pub state: bool,
-    pub pending_until_block: usize,
-    pub staking: usize,
-}
-
-#[derive(Clone)]
-pub struct Group {
-    pub index: usize,
-    pub epoch: usize,
-    pub capacity: usize,
-    pub size: usize,
-    pub threshold: usize,
-    pub state: bool,
-    pub public_key: Vec<u8>,
-    pub members: HashMap<String, Member>,
-    pub committers: Vec<String>,
-    pub commit_cache: HashMap<String, CommitCache>,
-}
-
-#[derive(Clone)]
-pub struct Member {
-    pub index: usize,
-    pub id_address: String,
-    pub partial_public_key: Vec<u8>,
-}
-
-#[derive(Clone)]
-pub struct CommitCache {
-    commit_result: CommitResult,
-    partial_public_key: Vec<u8>,
-}
-
-#[derive(Eq, Clone)]
-pub struct CommitResult {
-    group_epoch: usize,
-    public_key: Vec<u8>,
-    disqualified_nodes: Vec<String>,
-}
-
-impl PartialEq for CommitResult {
-    fn eq(&self, other: &Self) -> bool {
-        self.group_epoch == other.group_epoch
-            && self.public_key == other.public_key
-            && self.disqualified_nodes == other.disqualified_nodes
+    pub fn fulfill_relay(
+        &mut self,
+        _id_address: &str,
+        _relayer_group_index: usize,
+        _task_index: usize,
+        _signature: Vec<u8>,
+        _group_as_bytes: Vec<u8>,
+    ) -> ControllerResult<()> {
+        Err(ControllerError::AuthenticationFailed)
     }
 }
 
-impl Hash for CommitResult {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.group_epoch.hash(state);
-        self.public_key.hash(state);
-        self.disqualified_nodes.hash(state);
-    }
-}
-
-#[derive(Clone)]
-pub struct SignatureTask {
-    pub index: usize,
-    pub message: String,
-    pub group_index: usize,
-    pub assignment_block_height: usize,
-}
-
-#[derive(Clone)]
-pub struct DKGTask {
-    pub group_index: usize,
-    pub epoch: usize,
-    pub size: usize,
-    pub threshold: usize,
-    pub members: HashMap<String, usize>,
-    pub assignment_block_height: usize,
-    pub coordinator_address: String,
-}
-
-pub struct SignatureReward {
-    signature_task: SignatureTask,
-    expiration_block_height: usize,
-    committer: String,
-    group: Group,
-    partial_signatures: HashMap<String, Vec<u8>>,
-}
-
-trait Internal {
+trait ControllerInternal {
     fn get_strictly_majority_identical_commitment_result(
         &self,
         group_index: usize,
@@ -215,32 +126,29 @@ trait Internal {
         pending_block: usize,
         handle_group: bool,
     ) -> ControllerResult<()>;
-
-    fn calculate_hash<T: Hash>(t: &T) -> u64;
 }
 
-pub trait MockHelper {
+pub trait ControllerMockHelper {
     fn emit_dkg_task(&self) -> ControllerResult<DKGTask>;
 
-    fn emit_signature_task(&self) -> ControllerResult<SignatureTask>;
+    fn emit_group_relay_task(&self) -> ControllerResult<GroupRelayTask>;
 
     fn mine(&mut self, block_number: usize) -> ControllerResult<usize>;
 }
 
-pub trait Transactions {
+pub trait ControllerTransactions {
+    fn add_adapter(
+        &mut self,
+        adapter_chain_name: String,
+        adapter_address: String,
+    ) -> ControllerResult<()>;
+
     fn node_register(&mut self, id_address: String, id_public_key: Vec<u8>)
         -> ControllerResult<()>;
 
     fn node_activate(&mut self, id_address: String) -> ControllerResult<()>;
 
     fn node_quit(&mut self, id_address: &str) -> ControllerResult<()>;
-
-    fn claim(
-        &mut self,
-        id_address: &str,
-        reward_address: &str,
-        token_requested: usize,
-    ) -> ControllerResult<()>;
 
     fn commit_dkg(
         &mut self,
@@ -253,44 +161,15 @@ pub trait Transactions {
     ) -> ControllerResult<()>;
 
     fn check_dkg_state(&mut self, id_address: &str, group_index: usize) -> ControllerResult<()>;
-
-    fn request_randomness(&mut self, message: &str) -> ControllerResult<()>;
-
-    fn fulfill_randomness(
-        &mut self,
-        id_address: &str,
-        group_index: usize,
-        signature_index: usize,
-        signature: Vec<u8>,
-        partial_signatures: HashMap<String, Vec<u8>>,
-    ) -> ControllerResult<()>;
-
-    fn challenge_verifiable_reward(
-        &mut self,
-        id_address: &str,
-        signature_index: usize,
-    ) -> ControllerResult<()>;
-
-    fn check_verifiable_rewards_expiration(&mut self) -> ControllerResult<()>;
 }
 
-pub trait Views {
-    fn get_last_output(&self) -> u64;
-
+pub trait ControllerViews {
     fn get_node(&self, id_address: &str) -> &Node;
 
-    fn get_group(&self, index: usize) -> &Group;
-
-    fn get_signature_task_completion_state(&self, index: usize) -> bool;
-
-    fn valid_group_indices(&self) -> Vec<usize>;
-
-    fn pending_signature_tasks(&self) -> Vec<&SignatureTask>;
-
-    fn verifiable_signature_rewards(&self) -> Vec<&SignatureReward>;
+    fn get_adapters(&self) -> Vec<String>;
 }
 
-impl Internal for Controller {
+impl ControllerInternal for Controller {
     fn get_strictly_majority_identical_commitment_result(
         &self,
         group_index: usize,
@@ -377,12 +256,16 @@ impl Internal for Controller {
 
         coordinator.start(self.block_height, members)?;
 
+        let group_index = group.index;
+
         self.coordinators.insert(
-            group.index,
-            (format!("0xcoordinator{}", group.index), coordinator),
+            group_index,
+            (format!("0xcoordinator{}", group_index), coordinator),
         );
 
         // emit event
+        let group = self.groups.get(&group_index).unwrap();
+
         let mut members = HashMap::new();
 
         for (member_id_address, member) in group.members.iter() {
@@ -396,7 +279,7 @@ impl Internal for Controller {
             threshold: group.threshold,
             members,
             assignment_block_height: self.block_height,
-            coordinator_address: self.controller_address.clone(),
+            coordinator_address: self.deployed_address.clone(),
         };
 
         self.dkg_task = Some(dkg_task);
@@ -641,35 +524,31 @@ impl Internal for Controller {
             }
         }
 
+        let block_height = self.block_height;
+
         let node = self.nodes.get_mut(id_address).unwrap();
 
         node.state = false;
 
-        node.pending_until_block = if node.pending_until_block > self.block_height {
+        node.pending_until_block = if node.pending_until_block > block_height {
             node.pending_until_block + pending_block
         } else {
-            self.block_height + pending_block
+            block_height + pending_block
         };
 
         Ok(())
     }
-
-    fn calculate_hash<T: Hash>(t: &T) -> u64 {
-        let mut s = DefaultHasher::new();
-        t.hash(&mut s);
-        s.finish()
-    }
 }
 
-impl MockHelper for Controller {
+impl ControllerMockHelper for Controller {
     fn emit_dkg_task(&self) -> ControllerResult<DKGTask> {
         self.dkg_task
             .clone()
             .ok_or(ControllerError::NoTaskAvailable)
     }
 
-    fn emit_signature_task(&self) -> ControllerResult<SignatureTask> {
-        self.signature_task
+    fn emit_group_relay_task(&self) -> ControllerResult<GroupRelayTask> {
+        self.group_relay_task
             .clone()
             .ok_or(ControllerError::NoTaskAvailable)
     }
@@ -687,7 +566,17 @@ impl MockHelper for Controller {
     }
 }
 
-impl Transactions for Controller {
+impl ControllerTransactions for Controller {
+    fn add_adapter(
+        &mut self,
+        adapter_chain_name: String,
+        adapter_address: String,
+    ) -> ControllerResult<()> {
+        self.adapters.insert(adapter_chain_name, adapter_address);
+
+        Ok(())
+    }
+
     fn node_register(
         &mut self,
         id_address: String,
@@ -720,13 +609,15 @@ impl Transactions for Controller {
             return Err(ControllerError::NodeNotExisted);
         }
 
+        let block_height = self.block_height;
+
         let node = self.nodes.get_mut(&id_address).unwrap();
 
         if node.state {
             return Err(ControllerError::NodeActivated);
         }
 
-        if node.pending_until_block > self.block_height {
+        if node.pending_until_block > block_height {
             return Err(ControllerError::NodeNotAvailable(node.pending_until_block));
         }
 
@@ -743,44 +634,20 @@ impl Transactions for Controller {
             return Err(ControllerError::NodeNotExisted);
         }
 
-        self.check_verifiable_rewards_expiration()?;
+        // TODO randomness rewards post-verification
+        // self.check_verifiable_rewards_expiration()?;
 
-        if self
-            .verifiable_signature_rewards
-            .values()
-            .any(|vsr| vsr.committer == *id_address)
-        {
-            return Err(ControllerError::VerifiableSignatureRewardAsCommitterExisted);
-        }
+        // if self
+        //     .verifiable_signature_rewards
+        //     .values()
+        //     .any(|vsr| vsr.committer == *id_address)
+        // {
+        //     return Err(ControllerError::VerifiableSignatureRewardAsCommitterExisted);
+        // }
 
         self.freeze_node(id_address, PENDING_BLOCK_AFTER_QUIT, true)?;
 
         // mock token redeem
-
-        Ok(())
-    }
-
-    fn claim(
-        &mut self,
-        id_address: &str,
-        _reward_address: &str,
-        token_amount: usize,
-    ) -> ControllerResult<()> {
-        if !self.rewards.contains_key(id_address) {
-            return Err(ControllerError::RewardRecordNotExisted);
-        }
-
-        let actual_amount = self.rewards.get_mut(id_address).unwrap();
-
-        let operate_amount = if *actual_amount >= token_amount {
-            token_amount
-        } else {
-            *actual_amount
-        };
-
-        // mock redeem to reward_address
-
-        *actual_amount -= operate_amount;
 
         Ok(())
     }
@@ -839,6 +706,8 @@ impl Transactions for Controller {
                 (None, _) => {}
 
                 (Some(identical_commit), majority_members) => {
+                    let last_output = self.last_output as usize;
+
                     let group = self.groups.get_mut(&group_index).unwrap();
 
                     if majority_members.len() >= group.threshold {
@@ -872,7 +741,7 @@ impl Transactions for Controller {
                             .collect::<Vec<_>>();
 
                         let committer_indices = choose_randomly_from_indices(
-                            self.last_output as usize,
+                            last_output,
                             &qualified_indices,
                             max(DEFAULT_COMMITTERS_SIZE, group.threshold),
                         );
@@ -905,75 +774,88 @@ impl Transactions for Controller {
     }
 
     fn check_dkg_state(&mut self, id_address: &str, group_index: usize) -> ControllerResult<()> {
-        // handles coordinator selfdestruct if reaches DKG timeout, arranges members if fail grouping, and rewards trigger (sender)
+        // handles coordinator selfdestruct if it reaches DKG timeout, then
+        // 1. emit GroupRelayTask if grouping successfully
+        // 2. arrange members if fail to group
+        // and rewards trigger (sender)
+
+        let (_, coordinator) = self
+            .coordinators
+            .get(&group_index)
+            .ok_or(ControllerError::CoordinatorNotExisted)?;
+
+        if coordinator.in_phase().is_ok() {
+            return Err(ControllerError::CoordinatorNotEnded);
+        }
+
+        self.coordinators.remove(&group_index);
+
         let group = self
             .groups
             .get(&group_index)
             .ok_or(ControllerError::GroupNotExisted)?;
 
         if group.state {
-            return Err(ControllerError::GroupActivated);
-        }
+            let group_relay_task = GroupRelayTask {
+                controller_global_epoch: self.epoch,
+                relayed_group_index: group.index,
+                relayed_group_epoch: group.epoch,
+                assignment_block_height: self.block_height,
+            };
 
-        let (_, coordinator) = self
-            .coordinators
-            .get_mut(&group_index)
-            .ok_or(ControllerError::CoordinatorNotExisted)?;
+            self.group_relay_task = Some(group_relay_task);
+        } else {
+            match self.get_strictly_majority_identical_commitment_result(group_index) {
+                (None, _) => {
+                    let group = self.groups.get_mut(&group_index).unwrap();
 
-        if coordinator.epoch < group.epoch {
-            return Err(ControllerError::CoordinatorEpochObsolete(group.epoch));
-        }
+                    group.size = 0;
 
-        if coordinator.in_phase().is_ok() {
-            return Err(ControllerError::CoordinatorNotEnded);
-        }
+                    group.threshold = 0;
 
-        match self.get_strictly_majority_identical_commitment_result(group_index) {
-            (None, _) => {
-                let group = self.groups.get_mut(&group_index).unwrap();
+                    let members = group
+                        .members
+                        .keys()
+                        .map(|m| m.to_string())
+                        .collect::<Vec<_>>();
 
-                group.size = 0;
+                    group.members.clear();
 
-                group.threshold = 0;
-
-                let members = group
-                    .members
-                    .keys()
-                    .map(|m| m.to_string())
-                    .collect::<Vec<_>>();
-
-                group.members.clear();
-
-                for m in members {
-                    self.slash_node(&m, DISQUALIFIED_NODE_PENALTY, 0, false)?;
+                    for m in members {
+                        self.slash_node(&m, DISQUALIFIED_NODE_PENALTY, 0, false)?;
+                    }
                 }
-            }
 
-            (Some(_), majority_members) => {
-                let group = self.groups.get_mut(&group_index).unwrap();
+                (Some(_), majority_members) => {
+                    let group = self.groups.get_mut(&group_index).unwrap();
 
-                let disqualified_nodes = group
-                    .members
-                    .keys()
-                    .filter(|m| !majority_members.contains(m))
-                    .map(|m| m.to_string())
-                    .collect::<Vec<_>>();
+                    let disqualified_nodes = group
+                        .members
+                        .keys()
+                        .filter(|m| !majority_members.contains(m))
+                        .map(|m| m.to_string())
+                        .collect::<Vec<_>>();
 
-                group.size -= disqualified_nodes.len();
+                    group.size -= disqualified_nodes.len();
 
-                group
-                    .members
-                    .retain(|node, _| !disqualified_nodes.contains(node));
+                    let minimum = minimum_threshold(group.size);
 
-                for (index, disqualified_node) in disqualified_nodes.iter().enumerate() {
-                    let handle_group = index == disqualified_node.len() - 1;
+                    group.threshold = max(DEFAULT_MINIMUM_THRESHOLD, minimum);
 
-                    self.slash_node(
-                        disqualified_node,
-                        DISQUALIFIED_NODE_PENALTY,
-                        0,
-                        handle_group,
-                    )?;
+                    group
+                        .members
+                        .retain(|node, _| !disqualified_nodes.contains(node));
+
+                    for (index, disqualified_node) in disqualified_nodes.iter().enumerate() {
+                        let handle_group = index == disqualified_node.len() - 1;
+
+                        self.slash_node(
+                            disqualified_node,
+                            DISQUALIFIED_NODE_PENALTY,
+                            0,
+                            handle_group,
+                        )?;
+                    }
                 }
             }
         }
@@ -986,300 +868,37 @@ impl Transactions for Controller {
 
         *trigger_reward += COORDINATOR_STATE_TRIGGER_REWARD;
 
-        self.coordinators.remove(&group_index);
-
-        Ok(())
-    }
-
-    fn request_randomness(&mut self, message: &str) -> ControllerResult<()> {
-        let valid_group_indices = self.valid_group_indices();
-
-        println!("request randomness successfully");
-
-        if valid_group_indices.is_empty() {
-            println!("no available group!");
-            return Err(ControllerError::NoVaildGroup);
-        }
-        // mock: payment for request
-
-        let mut assignment_group_index = self.last_group_index;
-
-        loop {
-            assignment_group_index = (assignment_group_index + 1) % (self.groups.len() + 1);
-
-            if valid_group_indices.contains(&assignment_group_index) {
-                break;
-            }
-        }
-
-        let signature_task = SignatureTask {
-            index: self.signature_count,
-            message: format!("{}{}{}", message, &self.block_height, &self.last_output),
-            group_index: assignment_group_index,
-            assignment_block_height: self.block_height,
-        };
-
-        self.signature_count += 1;
-
-        self.signature_task = Some(signature_task.clone());
-        // self.emit_signature_task(signature_task.clone());
-
-        self.pending_signature_tasks
-            .insert(signature_task.index, signature_task);
-
-        self.last_group_index = assignment_group_index;
-
-        Ok(())
-    }
-
-    fn fulfill_randomness(
-        &mut self,
-        id_address: &str,
-        group_index: usize,
-        signature_index: usize,
-        signature: Vec<u8>,
-        partial_signatures: HashMap<String, Vec<u8>>,
-    ) -> ControllerResult<()> {
-        if !self.pending_signature_tasks.contains_key(&signature_index) {
-            return Err(ControllerError::TaskNotFound);
-        }
-
-        let signature_task = self
-            .pending_signature_tasks
-            .get(&signature_index)
-            .unwrap()
-            .clone();
-
-        if (self.block_height
-            <= signature_task.assignment_block_height + SIGNATURE_TASK_EXCLUSIVE_WINDOW)
-            && group_index != signature_task.group_index
-        {
-            return Err(ControllerError::TaskStillExclusive);
-        }
-
-        let group = self
-            .groups
-            .get(&group_index)
-            .ok_or(ControllerError::GroupNotExisted)?
-            .clone();
-
-        if !group.committers.contains(&id_address.to_string()) {
-            return Err(ControllerError::NotFromCommitter);
-        }
-
-        let message = &signature_task.message;
-
-        let group_public_key: G1 = bincode::deserialize(&group.public_key)?;
-
-        SigScheme::verify(&group_public_key, message.as_bytes(), &signature)?;
-
-        let committer = self
-            .nodes
-            .get_mut(id_address)
-            .ok_or(ControllerError::NodeNotExisted)?;
-
-        let committer_address = committer.id_address.clone();
-
-        for member_id_address in partial_signatures.keys() {
-            if !group.members.contains_key(member_id_address) {
-                return Err(ControllerError::ParticipantNotExisted);
-            }
-        }
-
-        let committer_reward = self
-            .rewards
-            .get_mut(&committer_address)
-            .ok_or(ControllerError::RewardRecordNotExisted)?;
-
-        *committer_reward += COMMITTER_REWARD_PER_SIGNATURE;
-
-        for member_id_address in partial_signatures.keys() {
-            let node = self
-                .nodes
-                .get(member_id_address)
-                .ok_or(ControllerError::NodeNotExisted)?;
-
-            let member_reward = self
-                .rewards
-                .get_mut(&node.id_address)
-                .ok_or(ControllerError::RewardRecordNotExisted)?;
-
-            *member_reward += REWARD_PER_SIGNATURE;
-        }
-
-        self.last_output = Controller::calculate_hash(&signature);
-
-        let signature_reward = SignatureReward {
-            signature_task,
-            expiration_block_height: self.block_height + SIGNATURE_REWARDS_VALIDATION_WINDOW,
-            committer: committer_address,
-            group,
-            partial_signatures,
-        };
-
-        self.verifiable_signature_rewards
-            .insert(signature_index, signature_reward);
-
-        self.pending_signature_tasks.remove(&signature_index);
-
-        Ok(())
-    }
-
-    fn challenge_verifiable_reward(
-        &mut self,
-        id_address: &str,
-        signature_index: usize,
-    ) -> ControllerResult<()> {
-        if !self
-            .verifiable_signature_rewards
-            .contains_key(&signature_index)
-        {
-            return Err(ControllerError::VerifiableSignatureRewardNotExisted);
-        }
-
-        let signature_reward = self
-            .verifiable_signature_rewards
-            .get(&signature_index)
-            .unwrap();
-
-        let group = &signature_reward.group;
-
-        let committer = self.nodes.get_mut(&signature_reward.committer).unwrap();
-
-        let committer_address = &committer.id_address.clone();
-
-        let message = &signature_reward.signature_task.message;
-
-        // TODO need a BLS-Aggregation Verification instead of loop to save computational fee
-        for (member_id_address, partial_signature) in signature_reward.partial_signatures.iter() {
-            let public_key_as_bytes = &group
-                .members
-                .get(member_id_address)
-                .unwrap()
-                .partial_public_key;
-
-            let public_key = bincode::deserialize(public_key_as_bytes)?;
-
-            // Note: decouple signature value and participant index from partial_signature
-            let res = bincode::deserialize(partial_signature)
-                .map_err(ControllerError::from)
-                .and_then(|partial_signature: Eval<Vec<u8>>| {
-                    SigScheme::verify(&public_key, message.as_bytes(), &partial_signature.value)
-                        .map_err(ControllerError::from)
-                });
-
-            match res {
-                Ok(()) => {}
-                Err(_err) => {
-                    self.slash_node(committer_address, COMMITTER_PENALTY_PER_SIGNATURE, 0, true)?;
-
-                    if !self.rewards.contains_key(id_address) {
-                        self.rewards.insert(id_address.to_string(), 0);
-                    }
-
-                    let challenger_reward = self.rewards.get_mut(id_address).unwrap();
-
-                    *challenger_reward += CHALLENGE_REWARD_PER_SIGNATURE;
-
-                    self.verifiable_signature_rewards.remove(&signature_index);
-
-                    return Ok(());
-                }
-            }
-        }
-
-        self.verifiable_signature_rewards.remove(&signature_index);
-
-        Err(ControllerError::SignatureRewardVerifiedSuccessfully)
-    }
-
-    fn check_verifiable_rewards_expiration(&mut self) -> ControllerResult<()> {
-        let current_block_height = self.block_height;
-
-        self.verifiable_signature_rewards
-            .retain(|_, vsr| current_block_height <= vsr.expiration_block_height);
-
         Ok(())
     }
 }
 
-impl Views for Controller {
-    fn get_last_output(&self) -> u64 {
-        self.last_output
-    }
-
+impl ControllerViews for Controller {
     fn get_node(&self, id_address: &str) -> &Node {
         self.nodes.get(id_address).unwrap()
     }
 
-    fn get_group(&self, index: usize) -> &Group {
-        self.groups.get(&index).unwrap()
-    }
-
-    fn get_signature_task_completion_state(&self, index: usize) -> bool {
-        index < self.signature_count && !self.pending_signature_tasks.contains_key(&index)
-    }
-
-    fn valid_group_indices(&self) -> Vec<usize> {
-        self.groups
-            .values()
-            .filter(|g| g.state)
-            .map(|g| g.index)
+    fn get_adapters(&self) -> Vec<String> {
+        self.adapters
+            .iter()
+            .map(|(name, address)| format!("{}: {}", name, address))
             .collect::<Vec<_>>()
     }
-
-    fn pending_signature_tasks(&self) -> Vec<&SignatureTask> {
-        self.pending_signature_tasks.values().collect::<Vec<_>>()
-    }
-
-    fn verifiable_signature_rewards(&self) -> Vec<&SignatureReward> {
-        self.verifiable_signature_rewards
-            .values()
-            .collect::<Vec<_>>()
-    }
-}
-
-fn choose_randomly_from_indices(seed: usize, indices: &[usize], mut count: usize) -> Vec<usize> {
-    let mut vec = indices.to_vec();
-
-    let mut res: Vec<usize> = Vec::new();
-
-    let mut hash = seed;
-
-    while count > 0 && !vec.is_empty() {
-        hash = Controller::calculate_hash(&hash) as usize;
-
-        let index = map_to_qualified_indices(hash % (vec.len() + 1), &vec);
-
-        res.push(index);
-
-        vec.retain(|&x| x != index);
-
-        count -= 1;
-    }
-
-    res
-}
-
-fn map_to_qualified_indices(mut index: usize, qualified_indices: &[usize]) -> usize {
-    let max = qualified_indices.iter().max().unwrap();
-
-    while !qualified_indices.contains(&index) {
-        index = (index + 1) % (max + 1);
-    }
-
-    index
 }
 
 #[cfg(test)]
 pub mod tests {
-    use super::{Controller, Transactions};
+
+    use crate::contract::adapter::AdapterTransactions;
+
+    use super::{Adapter, Controller};
 
     #[test]
     fn test() {
         let initial_entropy = 0x8762_4875_6548_6346;
 
-        let mut controller = Controller::new(initial_entropy, "0xcontroller_address".to_string());
+        let adapter = Adapter::new(initial_entropy, "0xcontroller_address".to_string());
+
+        let mut controller = Controller::new(adapter);
 
         let node_address = "0x1";
 

@@ -1,7 +1,7 @@
 use super::errors::NodeResult;
 use threshold_bls::{
     curve::bls12381::{PairingCurve as BLS12_381, Scalar, G1},
-    poly::Poly,
+    poly::Eval,
     sig::{G1Scheme, Share, SignatureScheme, ThresholdScheme},
 };
 
@@ -12,7 +12,8 @@ pub trait BLSCore {
     fn partial_sign(&self, private: &Share<Scalar>, msg: &[u8]) -> NodeResult<Vec<u8>>;
 
     /// Verifies a partial signature on a message against the public polynomial
-    fn partial_verify(&self, public: &Poly<G1>, msg: &[u8], partial: &[u8]) -> NodeResult<()>;
+    fn partial_verify(&self, partial_public_key: &G1, msg: &[u8], partial: &[u8])
+        -> NodeResult<()>;
 
     /// Aggregates all partials signature together. Note that this method does
     /// not verify if the partial signatures are correct or not; it only
@@ -29,8 +30,14 @@ impl BLSCore for MockBLSCore {
         Ok(partial_signature)
     }
 
-    fn partial_verify(&self, public: &Poly<G1>, msg: &[u8], partial: &[u8]) -> NodeResult<()> {
-        G1Scheme::<BLS12_381>::partial_verify(public, msg, partial)?;
+    fn partial_verify(
+        &self,
+        partial_public_key: &G1,
+        msg: &[u8],
+        partial: &[u8],
+    ) -> NodeResult<()> {
+        let partial: Eval<Vec<u8>> = bincode::deserialize(partial)?;
+        self.verify(partial_public_key, msg, &partial.value)?;
         Ok(())
     }
 

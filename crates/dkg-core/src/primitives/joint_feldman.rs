@@ -161,9 +161,9 @@ impl<C: Curve> Phase1<C> for DKGWaitingShare<C> {
     fn process_shares(
         mut self,
         bundles: &[BundledShares<C>],
-        mut publish_all: bool,
+        publish_all: bool,
     ) -> DKGResult<(DKGWaitingResponse<C>, Option<BundledResponses>)> {
-        publish_all = false;
+        // publish_all = false;
         let thr = self.info.thr();
         let my_idx = self.info.index;
         let (shares, publics, statuses) = process_shares_get_all(

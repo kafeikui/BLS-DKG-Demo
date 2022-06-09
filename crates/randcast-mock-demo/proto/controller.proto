@@ -70,6 +70,8 @@ service Views {
 
   rpc GetSignatureTaskCompletionState(GetSignatureTaskCompletionStateRequest)
       returns (GetSignatureTaskCompletionStateReply);
+
+  rpc EmitGroupRelayTask(google.protobuf.Empty) returns (GroupRelayTaskReply);
 }
 
 message GetGroupRequest {
@@ -121,4 +123,11 @@ message GetSignatureTaskCompletionStateRequest {
 
 message GetSignatureTaskCompletionStateReply {
   bool state = 1;
+}
+
+message GroupRelayTaskReply {
+  uint32 controller_global_epoch = 1;
+  uint32 relayed_group_index = 2;
+  uint32 relayed_group_epoch = 3;
+  uint32 assignment_block_height = 4;
 }

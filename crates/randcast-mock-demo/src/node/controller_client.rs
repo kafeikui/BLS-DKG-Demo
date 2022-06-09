@@ -1,15 +1,11 @@
-use std::collections::HashMap;
-
-use self::committer::committer_service_client::CommitterServiceClient;
-use self::committer::CommitPartialSignatureRequest;
 use self::controller::{
     transactions_client::TransactionsClient as ControllerTransactionsClient,
     views_client::ViewsClient as ControllerViewsClient, CheckDkgStateRequest, CommitDkgRequest,
     GetGroupRequest, GroupReply, Member, NodeRegisterRequest,
 };
 use self::controller::{
-    DkgTaskReply, FulfillRandomnessRequest, GetSignatureTaskCompletionStateRequest, MineRequest,
-    RequestRandomnessRequest, SignatureTaskReply,
+    DkgTaskReply, FulfillRandomnessRequest, GetSignatureTaskCompletionStateRequest,
+    GroupRelayTaskReply, MineRequest, RequestRandomnessRequest, SignatureTaskReply,
 };
 use self::coordinator::transactions_client::TransactionsClient as CoordinatorTransactionsClient;
 use self::coordinator::views_client::ViewsClient as CoordinatorViewsClient;
@@ -19,13 +15,14 @@ use dkg_core::{
     primitives::{BundledJustification, BundledResponses, BundledShares},
     BoardPublisher,
 };
+use std::collections::HashMap;
 use thiserror::Error;
 use threshold_bls::curve::bls12381::Curve;
 use tonic::metadata::MetadataValue;
 use tonic::{Code, Request};
 
 use super::errors::{NodeError, NodeResult};
-use super::types::{DKGTask, Group, Member as ModelMember, SignatureTask};
+use super::types::{DKGTask, Group, GroupRelayTask, Member as ModelMember, SignatureTask};
 
 pub mod controller {
     include!("../../stub/controller.rs");
@@ -33,10 +30,6 @@ pub mod controller {
 
 pub mod coordinator {
     include!("../../stub/coordinator.rs");
-}
-
-pub mod committer {
-    include!("../../stub/committer.rs");
 }
 
 #[async_trait]
@@ -81,6 +74,8 @@ pub trait ControllerMockHelper {
     async fn emit_dkg_task(&mut self) -> NodeResult<DKGTask>;
 
     async fn emit_signature_task(&mut self) -> NodeResult<SignatureTask>;
+
+    async fn emit_group_relay_task(&mut self) -> NodeResult<GroupRelayTask>;
 }
 
 #[async_trait]
@@ -122,48 +117,6 @@ pub trait CoordinatorViews {
 
     /// Returns the current phase of the DKG.
     async fn in_phase(&mut self) -> NodeResult<usize>;
-}
-
-pub struct MockCommitterClient {
-    id_address: String,
-    committer_service_client: CommitterServiceClient<tonic::transport::Channel>,
-}
-
-impl MockCommitterClient {
-    pub async fn new(
-        id_address: String,
-        committer_endpoint: String,
-    ) -> NodeResult<MockCommitterClient> {
-        let committer_service_client: CommitterServiceClient<tonic::transport::Channel> =
-            CommitterServiceClient::connect(format!("{}{}", "http://", committer_endpoint.clone()))
-                .await?;
-
-        Ok(MockCommitterClient {
-            id_address,
-            committer_service_client,
-        })
-    }
-}
-
-#[async_trait]
-impl CommitterService for MockCommitterClient {
-    async fn commit_partial_signature(
-        &mut self,
-        signature_index: usize,
-        partial_signature: Vec<u8>,
-    ) -> NodeResult<bool> {
-        let request = Request::new(CommitPartialSignatureRequest {
-            id_address: self.id_address.to_string(),
-            signature_index: signature_index as u32,
-            partial_signature,
-        });
-
-        self.committer_service_client
-            .commit_partial_signature(request)
-            .await
-            .map(|r| r.into_inner().result)
-            .map_err(|status| status.into())
-    }
 }
 
 pub struct MockControllerClient {
@@ -350,6 +303,32 @@ impl ControllerMockHelper for MockControllerClient {
                     index: index as usize,
                     message,
                     group_index: group_index as usize,
+                    assignment_block_height: assignment_block_height as usize,
+                }
+            })
+            .map_err(|status| match status.code() {
+                Code::NotFound => NodeError::NoTaskAvailable,
+                _ => status.into(),
+            })
+    }
+
+    async fn emit_group_relay_task(&mut self) -> NodeResult<GroupRelayTask> {
+        let request = Request::new(());
+        self.views_client
+            .emit_group_relay_task(request)
+            .await
+            .map(|r| {
+                let GroupRelayTaskReply {
+                    controller_global_epoch,
+                    relayed_group_index,
+                    relayed_group_epoch,
+                    assignment_block_height,
+                } = r.into_inner();
+
+                GroupRelayTask {
+                    controller_global_epoch: controller_global_epoch as usize,
+                    relayed_group_index: relayed_group_index as usize,
+                    relayed_group_epoch: relayed_group_epoch as usize,
                     assignment_block_height: assignment_block_height as usize,
                 }
             })
@@ -617,11 +596,13 @@ impl BoardPublisher<Curve> for MockCoordinatorClient {
     type Error = DKGContractError;
 
     async fn publish_shares(&mut self, shares: BundledShares<Curve>) -> Result<(), Self::Error> {
+        println!("called publish_shares");
         let serialized = bincode::serialize(&shares)?;
         self.publish(serialized).await.map_err(|e| e.into())
     }
 
     async fn publish_responses(&mut self, responses: BundledResponses) -> Result<(), Self::Error> {
+        println!("called publish_responses");
         let serialized = bincode::serialize(&responses)?;
         self.publish(serialized).await.map_err(|e| e.into())
     }
